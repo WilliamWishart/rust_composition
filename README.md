@@ -333,7 +333,7 @@ cargo build --release
 - [Dependency Injection in Rust](https://docs.rs/shaku/latest/shaku/)
 - [Domain-Driven Design](https://en.wikipedia.org/wiki/Domain-driven_design)
 - [The Dependency Inversion Principle](https://en.wikipedia.org/wiki/Dependency_inversion_principle)
-- [Clean Architecture in Rust](https://www.rust-lang.org/what/wg-libs/)
+- [Clean Architecture in Rust]()
 
 ## 💡 Best Practices
 
