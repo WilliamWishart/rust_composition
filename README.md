@@ -1,8 +1,8 @@
-# Enterprise-Scale Rust Application - DI/IoC Pattern
+# Enterprise-Scale Rust Application - DDD/CQRS/Event Sourcing
 
-> **📚 Learning Example** - This is an educational project designed to teach and demonstrate dependency injection and inversion of control patterns in Rust. It serves as a reference for how to structure large-scale applications using DDD principles.
+> **📚 Learning Example** - This is an educational project designed to teach and demonstrate **Dependency Injection (DI)**, **Domain-Driven Design (DDD)**, **CQRS** (Command Query Responsibility Segregation), and **Event Sourcing** patterns in Rust. It serves as a reference for how to structure large-scale, enterprise applications.
 
-A comprehensive example demonstrating **Dependency Injection (DI)** and **Inversion of Control (IoC)** patterns in Rust using an enterprise-scale architecture. This project shows best practices for organizing large Rust applications using **Domain-Driven Design (DDD)** principles.
+A comprehensive example demonstrating best practices for organizing large Rust applications using **Domain-Driven Design** combined with **CQRS** and **Event Sourcing** to achieve eventual consistency and scalability.
 
 ## 📁 Project Structure
 
@@ -20,6 +20,19 @@ rust_composition/
 │   │   ├── mod.rs                      # Module definition & re-exports
 │   │   ├── user_repository.rs          # Data access abstraction
 │   │   └── user_aggregate.rs           # Domain models (User aggregate)
+│   ├── events/                         # Event Sourcing (immutable event log)
+│   │   ├── mod.rs                      # Module definition & re-exports
+│   │   ├── domain_events.rs            # Domain event definitions
+│   │   ├── event_store.rs              # Event store (source of truth)
+│   │   ├── event_bus.rs                # Event bus (pub/sub)
+│   │   └── projections.rs              # Read models (eventual consistency)
+│   ├── commands/                       # CQRS Write Side
+│   │   ├── mod.rs                      # Module definition & re-exports
+│   │   ├── register_user_command.rs    # Command definitions
+│   │   └── command_handler.rs          # Command processors
+│   ├── queries/                        # CQRS Read Side
+│   │   ├── mod.rs                      # Module definition & re-exports
+│   │   └── user_queries.rs             # Query handlers
 │   ├── application/                    # Use cases & services
 │   │   ├── mod.rs                      # Module definition & re-exports
 │   │   └── user_service.rs             # Business logic orchestration
@@ -32,32 +45,28 @@ rust_composition/
 
 ## 🏗️ Architecture Overview
 
-This project follows a **Layered Architecture** pattern combined with **Dependency Injection**:
+This project follows a **Layered Architecture** with **CQRS** and **Event Sourcing**:
 
 ```
-┌─────────────────────────────────────────┐
-│         Application Layer               │
-│  (main.rs - Thin entry point)           │
-├─────────────────────────────────────────┤
-│       Composition Root Layer            │
-│  (AppBuilder - Dependency wiring)       │
-├─────────────────────────────────────────┤
-│      Application Services Layer         │
-│  (UserService - Orchestration)          │
-├─────────────────────────────────────────┤
-│         Domain Layer                    │
-│  (Business logic, Repositories)         │
-├─────────────────────────────────────────┤
-│      Infrastructure Layer               │
-│  (Logger, Database traits & impls)      │
-└─────────────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│            CQRS PATTERN                    │
+├────────────────────────────────────────────┤
+│  Commands (Write Side)  │  Queries (Read)  │
+│  - RegisterUserCommand  │  - UserQuery     │
+│  - Command Handlers     │  - Projections   │
+│     ↓                   │        ↑          │
+│  EVENT STORE (Event Sourcing - Source of Truth)
+│     ↓                   │        ↑          │
+│  Write Model            │  Read Model      │
+│  (Commands emit)        │  (Eventual       │
+│  - Domain Events        │   Consistency)   │
+│  - Immutable Log        │  - User Proj.    │
+└────────────────────────────────────────────┘
+                    ↓
+        Application & Domain Logic
 ```
 
 ## 📚 Layer Responsibilities
-
-### 1. **Infrastructure Layer** (`src/infrastructure/`)
-
-Defines abstractions and concrete implementations for cross-cutting concerns.
 
 **Files:**
 - `logger.rs` - Logger trait with `ConsoleLogger` and `MockLogger` implementations
@@ -267,30 +276,80 @@ let app = AppBuilder::new()
     .build_user_service();
 ```
 
+## 🎯 CQRS + Event Sourcing Pattern
+
+This architecture implements **CQRS** (Command Query Responsibility Segregation) combined with **Event Sourcing**:
+
+### Write Side (Commands)
+- `commands/register_user_command.rs` - Command definitions
+- `commands/command_handler.rs` - Command processors
+- Commands are validated and can fail
+- Successful commands emit domain events
+- Events are stored in the **Event Store** (immutable, append-only log)
+
+### Read Side (Queries)
+- `queries/user_queries.rs` - Query handlers
+- Queries read from **Projections** (read models)
+- Projections are eventually consistent with events
+- Multiple projections can exist for different use cases
+- Queries never modify state
+
+### Event Sourcing
+- `events/event_store.rs` - Immutable event log (source of truth)
+- `events/domain_events.rs` - Domain event definitions
+- `events/event_bus.rs` - Pub/sub for event distribution
+- `events/projections.rs` - Read models built from events
+
+**Flow:**
+```
+Command → Validation → Event → Event Store → Event Bus → Projections → Queries
+```
+
+### Eventual Consistency
+- Commands write to the Event Store immediately
+- Projections (read models) update asynchronously
+- The read model **eventually** becomes consistent with the write model
+- Enables horizontal scaling - reads and writes scale independently
+
 ## 🔑 Key Principles
 
 ### 1. **Dependency Inversion**
 - High-level modules (services) don't depend on low-level modules (implementations)
 - Both depend on abstractions (traits)
 
-### 2. **Single Responsibility**
+### 2. **Command-Query Separation**
+- Commands modify state (write model)
+- Queries retrieve data (read models)
+- Different optimization strategies for each
+
+### 3. **Event Sourcing**
+- Events are facts - they can't be false
+- Complete audit trail of all changes
+- Can reconstruct state at any point in time
+- Enables temporal queries and debugging
+
+### 4. **Eventual Consistency**
+- Projections lag behind the event store
+- Acceptable latency for most use cases
+- Scales better than immediate consistency
+- Real-world systems embrace eventual consistency
+
+### 5. **Single Responsibility**
 - Each module has one reason to change
 - Infrastructure handles cross-cutting concerns
 - Domain contains business logic
-- Application orchestrates use cases
+- Commands handle write side
+- Queries handle read side
+- Events represent what happened
 - Composition wires dependencies
 
-### 3. **Testability**
+### 6. **Testability**
 - Mock implementations allow testing without external dependencies
 - Layers can be tested in isolation
-- Composition root makes swapping implementations trivial
+- Commands produce predictable events
+- Projections can be verified against event sequences
 
-### 4. **Scalability**
-- Adding new features doesn't require modifying existing code
-- New implementations can be added without breaking existing code
-- Clear separation makes code discoverable
-
-### 5. **Flexibility**
+### 7. **Flexibility**
 - Swap implementations at composition time
 - Same code works with different configurations
 - Easy to support multiple environments (dev, test, prod)

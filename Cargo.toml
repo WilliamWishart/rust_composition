@@ -1,6 +1,8 @@
 [package]
 name = "rust_composition"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+uuid = { version = "1.6", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
