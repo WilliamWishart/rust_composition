@@ -1,4 +1,5 @@
 use std::fmt;
+use std::any::Any;
 
 /// DomainEvent trait - Base for all domain events
 /// Events are immutable facts about what happened in the domain
@@ -7,6 +8,7 @@ pub trait DomainEvent: Send + Sync {
     fn aggregate_id(&self) -> String;
     fn event_type(&self) -> &str;
     fn timestamp(&self) -> i64;
+    fn as_any(&self) -> &dyn Any; // Required for downcasting to concrete types
 }
 
 /// UserRegisteredEvent - Event fired when a user is registered
@@ -44,6 +46,10 @@ impl DomainEvent for UserRegisteredEvent {
 
     fn timestamp(&self) -> i64 {
         self.timestamp
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

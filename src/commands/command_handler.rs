@@ -1,33 +1,38 @@
 use std::sync::Arc;
 use crate::commands::RegisterUserCommand;
-use crate::events::{EventStore, EventBus, UserRegisteredEvent};
+use crate::events::EventBus;
 use crate::infrastructure::Logger;
+use crate::domain::{Repository, IRepository, User};
 
 /// UserCommandHandler - CQRS write side handler
-/// Processes commands, validates them, and emits domain events
-/// This is where business logic lives in event sourcing
+/// Processes commands through aggregates (not directly to events)
+/// Follows m-r pattern: Command → Aggregate → Events → EventStore
 pub struct UserCommandHandler {
-    event_store: EventStore,
+    repository: Arc<Repository>,
     event_bus: EventBus,
     logger: Arc<dyn Logger>,
 }
 
 impl UserCommandHandler {
     pub fn new(
-        event_store: EventStore,
+        repository: Arc<Repository>,
         event_bus: EventBus,
         logger: Arc<dyn Logger>,
     ) -> Self {
         UserCommandHandler {
-            event_store,
+            repository,
             event_bus,
             logger,
         }
     }
 
     /// Execute RegisterUserCommand
-    /// Validates the command and emits UserRegisteredEvent
-    pub fn handle_register_user(&self, command: RegisterUserCommand) -> Result<(), String> {
+    /// 1. Validate command
+    /// 2. Create aggregate (which produces UserRegisteredEvent)
+    /// 3. Save aggregate (persists event via repository)
+    /// 4. Publish event for eventual consistency
+    /// Returns the published events so caller can update read models
+    pub fn handle_register_user(&self, command: RegisterUserCommand) -> Result<Vec<Arc<dyn crate::events::DomainEvent>>, String> {
         self.logger.log(&format!(
             "Processing command: RegisterUser(id={}, name={})",
             command.user_id, command.name
@@ -42,27 +47,26 @@ impl UserCommandHandler {
             return Err("User ID must be greater than 0".to_string());
         }
 
-        // Create domain event (events never fail - they're facts)
-        let event = UserRegisteredEvent::new(command.user_id, command.name.clone());
+        // Create aggregate - this applies events internally
+        let user = User::new(command.user_id, command.name.clone());
 
-        // Store event (write to event store)
-        self.event_store
-            .append(Arc::new(event.clone()));
+        // Save through repository (handles optimistic locking, persistence)
+        // Returns the events that were saved
+        let saved_events = self.repository.save(&user, -1)?; // -1 indicates new aggregate
 
-        // Publish event (notify subscribers for eventual consistency)
-        self.event_bus.publish(&event);
+        // Publish events for subscribers (eventual consistency)
+        for event in saved_events.iter() {
+            // Get the concrete event type for publishing
+            if let Some(reg_event) = event.as_any().downcast_ref::<crate::events::UserRegisteredEvent>() {
+                self.event_bus.publish(reg_event);
+            }
+        }
 
         self.logger
             .log(&format!("User {} registered successfully", command.user_id));
 
-        Ok(())
-    }
-
-    pub fn get_event_store(&self) -> EventStore {
-        self.event_store.clone()
-    }
-
-    pub fn get_event_bus(&self) -> EventBus {
-        self.event_bus.clone()
+        Ok(saved_events)
     }
 }
+
+

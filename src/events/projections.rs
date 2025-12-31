@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use crate::events::{DomainEvent, EventHandler, UserRegisteredEvent};
+use crate::events::UserRegisteredEvent;
 
 /// UserProjection - Read model built from domain events
 /// Projections are eventually consistent - they're built by replaying events
@@ -63,40 +63,14 @@ impl Clone for UserProjection {
     }
 }
 
-/// UserProjectionHandler - Subscribes to user events and updates the read model
-/// This handler processes events and maintains eventual consistency
-pub struct UserProjectionHandler {
-    projection: UserProjection,
+/// Handles<T> pattern from m-r reference
+/// Strongly-typed event handlers for projections
+pub trait Handles<T> {
+    fn handle(&self, event: &T);
 }
 
-impl UserProjectionHandler {
-    pub fn new(projection: UserProjection) -> Self {
-        UserProjectionHandler { projection }
-    }
-
-    pub fn get_projection(&self) -> UserProjection {
-        self.projection.clone()
-    }
-}
-
-impl EventHandler for UserProjectionHandler {
-    fn handle(&self, event: &dyn DomainEvent) {
-        if event.event_type() == "UserRegistered" {
-            // In a real implementation, we'd properly downcast here
-            // For this example, we reconstruct from the event data
-            let _ = event.aggregate_id().parse::<u32>().ok();
-            // We need access to the actual UserRegisteredEvent
-            // This is a limitation of trait objects - we'd handle this better in production
-            // by storing the serialized event and deserializing
-        }
-    }
-
-    fn event_type(&self) -> &str {
-        "UserRegistered"
-    }
-}
-
-// Better approach: Create a strongly-typed projection handler
+/// TypedUserProjectionHandler - Implements m-r Handles<T> pattern
+/// This ensures type safety and strong coupling to specific event types
 pub struct TypedUserProjectionHandler {
     projection: UserProjection,
 }
@@ -106,11 +80,15 @@ impl TypedUserProjectionHandler {
         TypedUserProjectionHandler { projection }
     }
 
-    pub fn handle_user_registered(&self, event: &UserRegisteredEvent) {
-        self.projection.handle_user_registered(event);
-    }
-
     pub fn get_projection(&self) -> UserProjection {
         self.projection.clone()
     }
 }
+
+/// Implements Handles<UserRegisteredEvent> - strong typing from m-r
+impl Handles<UserRegisteredEvent> for TypedUserProjectionHandler {
+    fn handle(&self, event: &UserRegisteredEvent) {
+        self.projection.handle_user_registered(event);
+    }
+}
+
