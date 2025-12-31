@@ -34,6 +34,7 @@ pub use composition::AppBuilder;
 pub use application::UserService;
 pub use domain::{UserRepository, Repository, IRepository};
 pub use infrastructure::{Logger, Database};
-pub use events::{EventStore, EventBus, DomainEvent, UserRegisteredEvent};
+pub use events::{EventStore, EventBus, DomainEvent, UserRegisteredEvent, UserEvent};
 pub use commands::RegisterUserCommand;
 pub use events::projections::TypedUserProjectionHandler;
+pub use queries::UserQuery;

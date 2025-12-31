@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use crate::events::UserRegisteredEvent;
+use crate::events::UserEvent;
 
 /// UserProjection - Read model built from domain events
 /// Projections are eventually consistent - they're built by replaying events
@@ -39,13 +39,13 @@ impl UserProjection {
     }
 
     /// Update the projection based on events
-    fn handle_user_registered(&self, event: &UserRegisteredEvent) {
+    fn handle_user_registered(&self, user_id: u32, name: String, timestamp: i64) {
         let user = UserReadModel {
-            id: event.user_id,
-            name: event.name.clone(),
-            created_at: event.timestamp,
+            id: user_id,
+            name,
+            created_at: timestamp,
         };
-        self.users.lock().unwrap().insert(event.user_id, user);
+        self.users.lock().unwrap().insert(user_id, user);
     }
 }
 
@@ -71,6 +71,7 @@ pub trait Handles<T> {
 
 /// TypedUserProjectionHandler - Implements m-r Handles<T> pattern
 /// This ensures type safety and strong coupling to specific event types
+/// No runtime casting needed - compiler guarantees correctness
 pub struct TypedUserProjectionHandler {
     projection: UserProjection,
 }
@@ -85,10 +86,21 @@ impl TypedUserProjectionHandler {
     }
 }
 
-/// Implements Handles<UserRegisteredEvent> - strong typing from m-r
-impl Handles<UserRegisteredEvent> for TypedUserProjectionHandler {
-    fn handle(&self, event: &UserRegisteredEvent) {
-        self.projection.handle_user_registered(event);
+/// Implements Handles<UserEvent> - strongly typed with pattern matching
+impl Handles<UserEvent> for TypedUserProjectionHandler {
+    fn handle(&self, event: &UserEvent) {
+        // Pattern match on the event enum - compiler ensures all variants handled
+        match event {
+            UserEvent::Registered {
+                user_id,
+                name,
+                timestamp,
+            } => {
+                self.projection
+                    .handle_user_registered(*user_id, name.clone(), *timestamp);
+            }
+        }
     }
 }
+
 

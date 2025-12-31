@@ -58,11 +58,14 @@ fn main() {
     println!("📝 Command: Create User '{}'", cmd1.name);
     
     match command_handler.handle_register_user(cmd1) {
-        Ok(events) => {
-            // Process the returned events through the projection
-            for event in events {
-                if let Some(reg_event) = event.as_any().downcast_ref::<rust_composition::events::UserRegisteredEvent>() {
-                    projection_handler.handle(reg_event);
+        Ok(()) => {
+            // Get the events that were just persisted and update projection
+            if let Ok(_user) = repository.get_by_id(1) {
+                // Iterate through the user's event history and update projection
+                // In a real system, EventBus would do this asynchronously
+                let events = event_store.get_events(1);
+                for event in events {
+                    projection_handler.handle(&event);
                 }
             }
             println!("✓ Command processed");
@@ -78,10 +81,11 @@ fn main() {
     println!("📝 Command: Create User '{}'", cmd2.name);
     
     match command_handler.handle_register_user(cmd2) {
-        Ok(events) => {
-            for event in events {
-                if let Some(reg_event) = event.as_any().downcast_ref::<rust_composition::events::UserRegisteredEvent>() {
-                    projection_handler.handle(reg_event);
+        Ok(()) => {
+            if let Ok(_user) = repository.get_by_id(2) {
+                let events = event_store.get_events(2);
+                for event in events {
+                    projection_handler.handle(&event);
                 }
             }
             println!("✓ Command processed");

@@ -1,16 +1,15 @@
-use crate::events::{DomainEvent, UserRegisteredEvent};
-use std::sync::Arc;
+use crate::events::UserEvent;
 use std::fmt;
 
 /// User Aggregate - AggregateRoot pattern from m-r
 /// Encapsulates both state and business logic
-/// Accumulates uncommitted events until explicitly committed
+/// Uses enum-based events instead of trait objects - pure Rust idiom
 #[derive(Clone)]
 pub struct User {
     pub id: u32,
     pub name: String,
     pub version: i32, // Tracks event version for optimistic locking
-    uncommitted_changes: Vec<Arc<dyn DomainEvent>>, // Events not yet persisted
+    uncommitted_changes: Vec<UserEvent>, // Concrete events, no Arc, no trait objects!
 }
 
 impl fmt::Debug for User {
@@ -37,26 +36,39 @@ impl User {
         };
 
         // Create the registration event
-        let event = UserRegisteredEvent::new(id, name);
-        
+        let event = UserEvent::Registered {
+            user_id: id,
+            name,
+            timestamp: chrono::Utc::now().timestamp_millis(),
+        };
+
         // Apply the event to self (updates state)
-        user.apply_user_registered_event(&event);
-        
-        // Record the uncommitted change (as Arc)
-        user.uncommitted_changes.push(Arc::new(event.clone()));
+        user.apply_event(&event);
+
+        // Record the uncommitted change
+        user.uncommitted_changes.push(event);
 
         user
     }
 
-    /// Apply UserRegisteredEvent - updates aggregate state
-    /// This is called both when replaying history and when handling new commands
-    fn apply_user_registered_event(&mut self, event: &UserRegisteredEvent) {
-        self.id = event.user_id;
-        self.name = event.name.clone();
+    /// Apply event - updates aggregate state
+    /// Uses pattern matching on the enum - compiler enforces all cases handled
+    fn apply_event(&mut self, event: &UserEvent) {
+        match event {
+            UserEvent::Registered {
+                user_id,
+                name,
+                timestamp: _,
+            } => {
+                self.id = *user_id;
+                self.name = name.clone();
+            }
+        }
     }
 
     /// Load aggregate from event history (event sourcing reconstruction)
-    pub fn load_from_history(events: Vec<Arc<dyn DomainEvent>>) -> Result<Self, String> {
+    /// Pure pattern matching - no downcasting, no runtime type checks needed!
+    pub fn load_from_history(events: Vec<UserEvent>) -> Result<Self, String> {
         let mut user = User {
             id: 0,
             name: String::new(),
@@ -65,18 +77,16 @@ impl User {
         };
 
         for (index, event) in events.iter().enumerate() {
-            // Match event type and apply
-            if let Some(reg_event) = event.as_any().downcast_ref::<UserRegisteredEvent>() {
-                user.apply_user_registered_event(reg_event);
-                user.version = index as i32; // Version increments with each event
-            }
+            // Compiler guarantees we handle all UserEvent variants
+            user.apply_event(event);
+            user.version = index as i32; // Version increments with each event
         }
 
         Ok(user)
     }
 
     /// Get uncommitted changes (for Repository.Save)
-    pub fn get_uncommitted_changes(&self) -> Vec<Arc<dyn DomainEvent>> {
+    pub fn get_uncommitted_changes(&self) -> Vec<UserEvent> {
         self.uncommitted_changes.clone()
     }
 

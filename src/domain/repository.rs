@@ -1,10 +1,10 @@
 use crate::domain::User;
-use crate::events::EventStore;
+use crate::events::{EventStore, UserEvent};
 
 /// IRepository<T> pattern from m-r reference
 /// Handles persistence and retrieval of aggregates using event sourcing
 pub trait IRepository {
-    fn save(&self, aggregate: &User, expected_version: i32) -> Result<Vec<std::sync::Arc<dyn crate::events::DomainEvent>>, String>;
+    fn save(&self, aggregate: &User, expected_version: i32) -> Result<Vec<UserEvent>, String>;
     fn get_by_id(&self, id: u32) -> Result<User, String>;
 }
 
@@ -23,7 +23,7 @@ impl Repository {
 impl IRepository for Repository {
     /// Save an aggregate - persists uncommitted events with optimistic locking
     /// Returns the events that were saved
-    fn save(&self, aggregate: &User, expected_version: i32) -> Result<Vec<std::sync::Arc<dyn crate::events::DomainEvent>>, String> {
+    fn save(&self, aggregate: &User, expected_version: i32) -> Result<Vec<UserEvent>, String> {
         // Get uncommitted changes
         let changes = aggregate.get_uncommitted_changes();
 
@@ -42,7 +42,7 @@ impl IRepository for Repository {
 
         // Persist all uncommitted events
         for event in changes.iter() {
-            self.event_store.append(event.clone());
+            self.event_store.append(aggregate.id, event.clone());
         }
 
         Ok(changes)
@@ -51,7 +51,7 @@ impl IRepository for Repository {
     /// Load an aggregate by ID - reconstructs from event history
     fn get_by_id(&self, id: u32) -> Result<User, String> {
         // Get all events for this aggregate
-        let events = self.event_store.get_events(&id.to_string());
+        let events = self.event_store.get_events(id);
 
         if events.is_empty() {
             return Err(format!("Aggregate not found: {}", id));
@@ -61,4 +61,5 @@ impl IRepository for Repository {
         User::load_from_history(events)
     }
 }
+
 

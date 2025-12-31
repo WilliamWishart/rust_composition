@@ -32,7 +32,7 @@ impl UserCommandHandler {
     /// 3. Save aggregate (persists event via repository)
     /// 4. Publish event for eventual consistency
     /// Returns the published events so caller can update read models
-    pub fn handle_register_user(&self, command: RegisterUserCommand) -> Result<Vec<Arc<dyn crate::events::DomainEvent>>, String> {
+    pub fn handle_register_user(&self, command: RegisterUserCommand) -> Result<(), String> {
         self.logger.log(&format!(
             "Processing command: RegisterUser(id={}, name={})",
             command.user_id, command.name
@@ -55,17 +55,14 @@ impl UserCommandHandler {
         let saved_events = self.repository.save(&user, -1)?; // -1 indicates new aggregate
 
         // Publish events for subscribers (eventual consistency)
-        for event in saved_events.iter() {
-            // Get the concrete event type for publishing
-            if let Some(reg_event) = event.as_any().downcast_ref::<crate::events::UserRegisteredEvent>() {
-                self.event_bus.publish(reg_event);
-            }
+        for event in saved_events {
+            self.event_bus.publish(&event);
         }
 
         self.logger
             .log(&format!("User {} registered successfully", command.user_id));
 
-        Ok(saved_events)
+        Ok(())
     }
 }
 

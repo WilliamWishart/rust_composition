@@ -1,45 +1,52 @@
 use std::sync::{Arc, Mutex};
-use crate::events::DomainEvent;
+use std::collections::HashMap;
+use crate::events::UserEvent;
 
 /// EventStore - Immutable event log
-/// Implements Event Sourcing pattern - stores complete history of events
-/// This is the source of truth for the domain
+/// Stores all domain events (facts) - the single source of truth
+/// Events are never modified, only appended
 pub struct EventStore {
-    events: Arc<Mutex<Vec<Arc<dyn DomainEvent>>>>,
+    events: Arc<Mutex<HashMap<u32, Vec<UserEvent>>>>, // Keyed by aggregate ID
 }
 
 impl EventStore {
     pub fn new() -> Self {
         EventStore {
-            events: Arc::new(Mutex::new(Vec::new())),
+            events: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     /// Append an event to the store
     /// Events are immutable - never modified, only appended
-    pub fn append(&self, event: Arc<dyn DomainEvent>) {
+    pub fn append(&self, aggregate_id: u32, event: UserEvent) {
         let mut events = self.events.lock().unwrap();
-        events.push(event);
+        events
+            .entry(aggregate_id)
+            .or_insert_with(Vec::new)
+            .push(event);
     }
 
     /// Retrieve all events for an aggregate
-    pub fn get_events(&self, aggregate_id: &str) -> Vec<Arc<dyn DomainEvent>> {
+    pub fn get_events(&self, aggregate_id: u32) -> Vec<UserEvent> {
         let events = self.events.lock().unwrap();
         events
-            .iter()
-            .filter(|e| e.aggregate_id() == aggregate_id)
+            .get(&aggregate_id)
             .cloned()
-            .collect()
+            .unwrap_or_default()
     }
 
     /// Retrieve all events in order
-    pub fn get_all_events(&self) -> Vec<Arc<dyn DomainEvent>> {
-        self.events.lock().unwrap().clone()
+    pub fn get_all_events(&self) -> Vec<UserEvent> {
+        let events = self.events.lock().unwrap();
+        events
+            .values()
+            .flat_map(|v| v.iter().cloned())
+            .collect()
     }
 
     /// Get the total number of events
     pub fn event_count(&self) -> usize {
-        self.events.lock().unwrap().len()
+        self.events.lock().unwrap().values().map(|v| v.len()).sum()
     }
 }
 
