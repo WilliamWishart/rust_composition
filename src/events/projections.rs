@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use crate::events::UserEvent;
+use crate::events::event_bus::EventHandler;
 
 /// UserProjection - Read model built from domain events
 /// Projections are eventually consistent - they're built by replaying events
@@ -46,6 +47,14 @@ impl UserProjection {
             created_at: timestamp,
         };
         self.users.lock().unwrap().insert(user_id, user);
+    }
+
+    /// Handle user renamed event
+    fn handle_user_renamed(&self, user_id: u32, new_name: String, _timestamp: i64) {
+        let mut users = self.users.lock().unwrap();
+        if let Some(user) = users.get_mut(&user_id) {
+            user.name = new_name;
+        }
     }
 }
 
@@ -99,7 +108,23 @@ impl Handles<UserEvent> for TypedUserProjectionHandler {
                 self.projection
                     .handle_user_registered(*user_id, name.clone(), *timestamp);
             }
+            UserEvent::Renamed {
+                user_id,
+                new_name,
+                timestamp,
+            } => {
+                self.projection
+                    .handle_user_renamed(*user_id, new_name.clone(), *timestamp);
+            }
         }
+    }
+}
+
+/// Implements EventHandler trait for EventBus integration
+/// Allows TypedUserProjectionHandler to be registered as an EventBus subscriber
+impl EventHandler for TypedUserProjectionHandler {
+    fn handle_event(&self, event: &UserEvent) {
+        self.handle(event);
     }
 }
 

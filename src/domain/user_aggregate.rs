@@ -63,6 +63,13 @@ impl User {
                 self.id = *user_id;
                 self.name = name.clone();
             }
+            UserEvent::Renamed {
+                user_id: _,
+                new_name,
+                timestamp: _,
+            } => {
+                self.name = new_name.clone();
+            }
         }
     }
 
@@ -93,5 +100,20 @@ impl User {
     /// Mark changes as committed (called after successful persist)
     pub fn mark_changes_as_committed(&mut self) {
         self.uncommitted_changes.clear();
+    }
+
+    /// Rename the user (domain command)
+    pub fn rename(&mut self, new_name: String) {
+        let event = UserEvent::Renamed {
+            user_id: self.id,
+            new_name,
+            timestamp: chrono::Utc::now().timestamp_millis(),
+        };
+
+        // Apply the event to self (updates state)
+        self.apply_event(&event);
+
+        // Record the uncommitted change
+        self.uncommitted_changes.push(event);
     }
 }

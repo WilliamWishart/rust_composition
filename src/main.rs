@@ -10,9 +10,9 @@
 // - Commands → Aggregates → Events → Projections → Queries
 
 use rust_composition::{
-    infrastructure::MockLogger, commands::RegisterUserCommand,
+    infrastructure::MockLogger, commands::{RegisterUserCommand, RenameUserCommand},
     events::{EventStore, EventBus},
-    events::projections::{UserProjection, TypedUserProjectionHandler, Handles},
+    events::projections::{UserProjection, TypedUserProjectionHandler},
     queries::UserQuery, commands::UserCommandHandler,
     domain::{Repository, IRepository},
 };
@@ -30,7 +30,10 @@ fn main() {
 
     // Setup projection (read model)
     let user_projection = UserProjection::new();
-    let projection_handler = TypedUserProjectionHandler::new(user_projection.clone());
+    let projection_handler = Arc::new(TypedUserProjectionHandler::new(user_projection.clone()));
+
+    // Register projection handler as an EventBus subscriber
+    event_bus.subscribe(projection_handler.clone());
 
     // Create command handler (write side) - uses repository pattern
     let command_handler = UserCommandHandler::new(
@@ -47,7 +50,8 @@ fn main() {
     println!("✓ Repository initialized (aggregate persistence)");
     println!("✓ User Projection (Read Model) initialized");
     println!("✓ Command Handler (Write Side) initialized");
-    println!("✓ Query Handler (Read Side) initialized\n");
+    println!("✓ Query Handler (Read Side) initialized");
+    println!("✓ Projection Handler subscribed to EventBus\n");
 
     // --- EXECUTION: Commands (Write Side) ---
     println!("--- COMMANDS (Write Side) ---\n");
@@ -59,18 +63,10 @@ fn main() {
     
     match command_handler.handle_register_user(cmd1) {
         Ok(()) => {
-            // Get the events that were just persisted and update projection
-            if let Ok(_user) = repository.get_by_id(1) {
-                // Iterate through the user's event history and update projection
-                // In a real system, EventBus would do this asynchronously
-                let events = event_store.get_events(1);
-                for event in events {
-                    projection_handler.handle(&event);
-                }
-            }
             println!("✓ Command processed");
             println!("  - Aggregate created from command");
             println!("  - Event appended to EventStore");
+            println!("  - EventBus published to all subscribers");
             println!("  - Projection updated (Eventual Consistency)\n");
         }
         Err(e) => println!("❌ Command failed: {}\n", e),
@@ -82,12 +78,6 @@ fn main() {
     
     match command_handler.handle_register_user(cmd2) {
         Ok(()) => {
-            if let Ok(_user) = repository.get_by_id(2) {
-                let events = event_store.get_events(2);
-                for event in events {
-                    projection_handler.handle(&event);
-                }
-            }
             println!("✓ Command processed");
             println!("  - Aggregate created from command");
             println!("  - Event appended to EventStore");
@@ -102,10 +92,34 @@ fn main() {
         println!("⚠️  Invalid command rejected: {}\n", e);
     }
 
+    // --- RENAME COMMANDS (Write Side) ---
+    println!("--- RENAME COMMANDS (Write Side) ---\n");
+
+    let rename_cmd = RenameUserCommand::new(1, "Alicia".to_string())
+        .expect("Command validation failed");
+    println!("📝 Command: Rename User 1 to '{}'", rename_cmd.new_name);
+    
+    match command_handler.handle_rename_user(rename_cmd) {
+        Ok(()) => {
+            println!("✓ Command processed");
+            println!("  - Aggregate loaded from event history");
+            println!("  - New event appended to EventStore");
+            println!("  - EventBus published to all subscribers");
+            println!("  - Projection updated (Eventual Consistency)\n");
+        }
+        Err(e) => println!("❌ Command failed: {}\n", e),
+    }
+
+    // Demonstrate rename validation failure
+    let invalid_rename = RenameUserCommand::new(2, "".to_string());
+    if let Err(e) = invalid_rename {
+        println!("⚠️  Invalid rename command rejected: {}\n", e);
+    }
+
     // --- STATE: Event Store ---
     println!("--- EVENT STORE (Source of Truth) ---\n");
     println!("Total events stored: {}", event_store.event_count());
-    println!("Events are immutable facts - never modified, only appended\n");
+    println!("Events are immutable, append-only log of all domain changes\n");
 
     // --- RECONSTRUCTION: Load aggregate from history ---
     println!("--- AGGREGATE RECONSTRUCTION (Event Sourcing) ---\n");
@@ -125,7 +139,7 @@ fn main() {
     println!("--- QUERIES (Read Side - Eventually Consistent) ---\n");
     
     if let Some(user) = user_query.get_user(1) {
-        println!("✓ Query: Get User(1) → {}", user);
+        println!("✓ Query: Get User(1) → {} (After Rename)", user);
     }
     
     if let Some(user) = user_query.get_user(2) {

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::commands::RegisterUserCommand;
+use crate::commands::{RegisterUserCommand, RenameUserCommand};
 use crate::events::EventBus;
 use crate::infrastructure::Logger;
 use crate::domain::{Repository, IRepository, User};
@@ -64,6 +64,45 @@ impl UserCommandHandler {
 
         Ok(())
     }
+
+    /// Execute RenameUserCommand
+    /// 1. Validate command
+    /// 2. Load aggregate from history (event sourcing)
+    /// 3. Apply rename to aggregate (which produces UserRenamedEvent)
+    /// 4. Save aggregate (persists event via repository)
+    /// 5. Publish event for eventual consistency
+    pub fn handle_rename_user(&self, command: RenameUserCommand) -> Result<(), String> {
+        self.logger.log(&format!(
+            "Processing command: RenameUser(id={}, new_name={})",
+            command.user_id, command.new_name
+        ));
+
+        // Validate command (commands can fail)
+        if command.new_name.is_empty() {
+            return Err("New name cannot be empty".to_string());
+        }
+
+        if command.user_id == 0 {
+            return Err("User ID must be greater than 0".to_string());
+        }
+
+        // Load aggregate from history (event sourcing reconstruction)
+        let mut user = self.repository.get_by_id(command.user_id)?;
+
+        // Apply the rename to the aggregate
+        user.rename(command.new_name.clone());
+
+        // Save through repository (handles optimistic locking, persistence)
+        let saved_events = self.repository.save(&user, user.version)?;
+
+        // Publish events for subscribers (eventual consistency)
+        for event in saved_events {
+            self.event_bus.publish(&event);
+        }
+
+        self.logger
+            .log(&format!("User {} renamed successfully", command.user_id));
+
+        Ok(())
+    }
 }
-
-

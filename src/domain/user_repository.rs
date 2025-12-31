@@ -1,28 +1,14 @@
-use std::sync::Arc;
-use crate::infrastructure::{Logger, Database};
-
-/// UserRepository - Data Access Layer
-/// Handles all user-related database operations
-pub struct UserRepository {
-    logger: Arc<dyn Logger>,
-    db: Arc<dyn Database>,
-}
-
-impl UserRepository {
-    pub fn new(logger: Arc<dyn Logger>, db: Arc<dyn Database>) -> Self {
-        UserRepository { logger, db }
-    }
-
-    pub fn get_user(&self, user_id: u32) -> String {
-        self.logger.log(&format!("Fetching user {}", user_id));
-        self.db.query(&format!("SELECT * FROM users WHERE id = {}", user_id))
-    }
-
-    pub fn save_user(&self, user_id: u32, name: &str) {
-        self.logger.log(&format!("Saving user {} with name '{}'", user_id, name));
-        self.db.query(&format!(
-            "INSERT INTO users (id, name) VALUES ({}, '{}')",
-            user_id, name
-        ));
-    }
-}
+// UserRepository - REMOVED
+// 
+// This was a legacy data access pattern that bypassed event sourcing.
+// It violated CQRS principles by mixing write model (save_user) with read model (get_user).
+//
+// Proper replacement:
+// - Write operations: Use Repository with event sourcing (src/domain/repository.rs)
+// - Read operations: Use UserQuery with projections (src/queries/user_queries.rs)
+//
+// This ensures:
+// - Commands flow through aggregates to events (CQRS write model)
+// - Queries read from projections (CQRS read model)
+// - Event sourcing provides a complete audit trail
+// - No direct database access bypassing the event stream

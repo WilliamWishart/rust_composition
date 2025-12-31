@@ -13,13 +13,15 @@
 // - Eventual consistency via event bus and projections
 //
 // Module Organization:
-// - infrastructure/  : Traits and external adapters (Logger, Database)
+// - infrastructure/  : Traits and external adapters (Logger)
 // - domain/          : Business logic and repositories (pure domain)
 // - events/          : Domain events, event store, and event bus (event sourcing)
 // - commands/        : Command handlers (CQRS write side)
 // - queries/         : Query handlers (CQRS read side)
-// - application/     : Services that orchestrate use cases
 // - composition/     : Dependency injection and wiring
+//
+// NOTE: UserService and UserRepository have been removed.
+// Use CommandHandler + Repository for writes, UserQuery + Projections for reads.
 
 pub mod infrastructure;
 pub mod domain;
@@ -31,10 +33,9 @@ pub mod composition;
 
 // Re-export commonly used types at the library root for convenience
 pub use composition::AppBuilder;
-pub use application::UserService;
-pub use domain::{UserRepository, Repository, IRepository};
-pub use infrastructure::{Logger, Database};
-pub use events::{EventStore, EventBus, DomainEvent, UserRegisteredEvent, UserEvent};
-pub use commands::RegisterUserCommand;
+pub use domain::{Repository, IRepository};
+pub use infrastructure::Logger;
+pub use events::{EventStore, EventBus, EventHandler, UserEvent};
+pub use commands::{RegisterUserCommand, RenameUserCommand};
 pub use events::projections::TypedUserProjectionHandler;
 pub use queries::UserQuery;

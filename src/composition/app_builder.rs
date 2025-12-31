@@ -1,14 +1,17 @@
 use std::sync::Arc;
-use crate::infrastructure::{Logger, Database, ConsoleLogger, MockDatabase};
-use crate::domain::UserRepository;
-use crate::application::UserService;
+use crate::infrastructure::{Logger, ConsoleLogger};
 
 /// AppBuilder - Composition Root
 /// Centralizes dependency wiring and application composition
 /// This is the only place that knows about concrete implementations
+///
+/// The proper composition pattern for CQRS:
+/// 1. Setup infrastructure (Logger, EventStore)
+/// 2. Create write side: Repository + EventStore → CommandHandler
+/// 3. Create read side: UserProjection + EventBus → UserQuery
+/// 4. Wire them together via EventBus
 pub struct AppBuilder {
     logger: Arc<dyn Logger>,
-    database: Arc<dyn Database>,
 }
 
 impl AppBuilder {
@@ -16,7 +19,6 @@ impl AppBuilder {
     pub fn new() -> Self {
         AppBuilder {
             logger: Arc::new(ConsoleLogger),
-            database: Arc::new(MockDatabase),
         }
     }
 
@@ -26,20 +28,9 @@ impl AppBuilder {
         self
     }
 
-    /// Replace the database implementation
-    pub fn with_database(mut self, database: Arc<dyn Database>) -> Self {
-        self.database = database;
-        self
-    }
-
-    /// Build and return the fully wired UserService
-    pub fn build_user_service(self) -> UserService {
-        let repository = Arc::new(UserRepository::new(
-            self.logger.clone(),
-            self.database.clone(),
-        ));
-
-        UserService::new(repository, self.logger)
+    /// Get the logger (for wiring CQRS components)
+    pub fn get_logger(&self) -> Arc<dyn Logger> {
+        self.logger.clone()
     }
 }
 

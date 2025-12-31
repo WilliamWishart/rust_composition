@@ -1,6 +1,10 @@
 // Application Layer: Services that orchestrate domain logic
-// Implements use cases and coordinates between layers
+// 
+// NOTE: In CQRS architecture, application services are not needed.
+// Instead use:
+// - Commands → CommandHandler (write side)
+// - Queries → UserQuery (read side)
+//
+// UserService was removed as it duplicated repository logic.
 
 pub mod user_service;
-
-pub use user_service::UserService;

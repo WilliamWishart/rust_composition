@@ -1,29 +1,12 @@
-use std::sync::Arc;
-use crate::infrastructure::Logger;
-use crate::domain::UserRepository;
-
-/// UserService - Application Service
-/// Orchestrates user-related business logic
-/// Uses cases are implemented here
-pub struct UserService {
-    repository: Arc<UserRepository>,
-    logger: Arc<dyn Logger>,
-}
-
-impl UserService {
-    pub fn new(repository: Arc<UserRepository>, logger: Arc<dyn Logger>) -> Self {
-        UserService { repository, logger }
-    }
-
-    /// Use case: Register a new user
-    pub fn register_user(&self, id: u32, name: &str) {
-        self.logger.log("=== Starting user registration ===");
-        self.repository.save_user(id, name);
-        self.logger.log("=== User registration complete ===");
-    }
-
-    /// Use case: Retrieve user information
-    pub fn get_user(&self, id: u32) -> String {
-        self.repository.get_user(id)
-    }
-}
+// UserService - REMOVED
+// 
+// This was redundant in a CQRS architecture.
+// Use instead:
+// - Commands: UserCommandHandler handles all write operations
+// - Queries: UserQuery handles all read operations
+//
+// The proper flow is:
+// Commands → CommandHandler → Repository → EventStore
+// EventStore → Projections → Queries
+//
+// Application services are not needed when using CQRS with event sourcing.

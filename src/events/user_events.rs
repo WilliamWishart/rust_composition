@@ -13,6 +13,11 @@ pub enum UserEvent {
         name: String,
         timestamp: i64,
     },
+    Renamed {
+        user_id: u32,
+        new_name: String,
+        timestamp: i64,
+    },
 }
 
 impl UserEvent {
@@ -20,6 +25,7 @@ impl UserEvent {
     pub fn aggregate_id(&self) -> u32 {
         match self {
             UserEvent::Registered { user_id, .. } => *user_id,
+            UserEvent::Renamed { user_id, .. } => *user_id,
         }
     }
 
@@ -27,6 +33,7 @@ impl UserEvent {
     pub fn event_type(&self) -> &str {
         match self {
             UserEvent::Registered { .. } => "UserRegistered",
+            UserEvent::Renamed { .. } => "UserRenamed",
         }
     }
 
@@ -34,6 +41,7 @@ impl UserEvent {
     pub fn timestamp(&self) -> i64 {
         match self {
             UserEvent::Registered { timestamp, .. } => *timestamp,
+            UserEvent::Renamed { timestamp, .. } => *timestamp,
         }
     }
 }
@@ -50,6 +58,17 @@ impl fmt::Display for UserEvent {
                     f,
                     "UserRegistered(id={}, name={}, timestamp={})",
                     user_id, name, timestamp
+                )
+            }
+            UserEvent::Renamed {
+                user_id,
+                new_name,
+                timestamp,
+            } => {
+                write!(
+                    f,
+                    "UserRenamed(id={}, new_name={}, timestamp={})",
+                    user_id, new_name, timestamp
                 )
             }
         }
