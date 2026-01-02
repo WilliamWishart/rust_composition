@@ -5,9 +5,9 @@ use axum::{
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 
-use application::{EventBus, UserCommandHandler};
+use application::{EventBus, UserCommandHandler, ProjectionEventHandler};
 use infrastructure::{ConsoleLogger, LogLevel};
-use persistence::{EventStore, Repository};
+use persistence::{EventStore, Repository, UserProjection};
 use api_rest::{handlers::{register_user, rename_user}, AppState};
 
 #[tokio::main]
@@ -15,8 +15,17 @@ async fn main() {
     // Initialize infrastructure
     let logger = Arc::new(ConsoleLogger::new(LogLevel::Info));
     let event_store = EventStore::new();
-    let repository = Arc::new(Repository::new(event_store));
-    let event_bus = EventBus::new();
+    
+    // Initialize projection and event bus
+    let projection = UserProjection::new();
+    let event_bus = EventBus::new().with_logger(logger.clone());
+    
+    // Subscribe projection to events
+    let projection_handler = Arc::new(ProjectionEventHandler::new(projection.clone()));
+    event_bus.subscribe(projection_handler);
+    
+    // Create repository with both event store and projection
+    let repository = Arc::new(Repository::new(event_store, projection));
 
     // Create command handler
     let command_handler = Arc::new(UserCommandHandler::new(

@@ -36,6 +36,18 @@ impl UserProjection {
             .collect()
     }
 
+    pub fn find_by_name(&self, name: &str) -> Option<UserReadModel> {
+        // NOTE: This performs an O(n) linear scan. For production systems with 
+        // large user bases, consider adding a secondary index (HashMap<String, u32>)
+        // mapping names to user IDs for O(1) lookups.
+        self.users
+            .lock()
+            .unwrap()
+            .values()
+            .find(|u| u.name == name)
+            .cloned()
+    }
+
     fn handle_user_registered(&self, user_id: u32, name: String, timestamp: i64) {
         let user = UserReadModel {
             id: user_id,
