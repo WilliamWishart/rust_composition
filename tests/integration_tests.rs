@@ -48,12 +48,12 @@ fn setup_cqrs_system() -> (
 // COMMAND TESTS
 // ============================================================================
 
-#[test]
-fn test_valid_command_registration() {
+#[tokio::test]
+async fn test_valid_command_registration() {
     let (_, _, command_handler, _) = setup_cqrs_system();
 
     let cmd = RegisterUserCommand::new(1, "Alice".to_string()).expect("Valid command");
-    let result = command_handler.handle_register_user(cmd);
+    let result = command_handler.handle_register_user(cmd).await;
 
     assert!(result.is_ok(), "Valid command should succeed");
 }
@@ -183,7 +183,7 @@ async fn test_eventbus_subscribers_receive_events() {
 
     // Publish events asynchronously
     for event in events {
-        event_bus.publish(&event).await;
+        let _ = event_bus.publish(&event).await;
     }
 
     // Verify subscriber received the event
@@ -194,13 +194,13 @@ async fn test_eventbus_subscribers_receive_events() {
     );
 }
 
-#[test]
-fn test_projection_updated_via_eventbus() {
+#[tokio::test]
+async fn test_projection_updated_via_eventbus() {
     let (_, _, command_handler, user_query) = setup_cqrs_system();
 
     // Issue command - events flow through EventBus to projection
     let cmd = RegisterUserCommand::new(1, "Alice".to_string()).expect("Valid command");
-    command_handler.handle_register_user(cmd).expect("Command should succeed");
+    command_handler.handle_register_user(cmd).await.expect("Command should succeed");
 
     // Query the read model
     let result = user_query.get_user(1);
@@ -216,13 +216,13 @@ fn test_projection_updated_via_eventbus() {
 // END-TO-END CQRS TESTS
 // ============================================================================
 
-#[test]
-fn test_end_to_end_single_user_registration() {
+#[tokio::test]
+async fn test_end_to_end_single_user_registration() {
     let (repository, logger, command_handler, user_query) = setup_cqrs_system();
 
     // Issue command
     let cmd = RegisterUserCommand::new(1, "Bob".to_string()).expect("Valid command");
-    command_handler.handle_register_user(cmd).expect("Command should succeed");
+    command_handler.handle_register_user(cmd).await.expect("Command should succeed");
 
     // Verify: Aggregate reconstructed from events
     let loaded_user = repository.get_by_id(1).expect("Should retrieve user");
@@ -244,14 +244,14 @@ fn test_end_to_end_single_user_registration() {
     );
 }
 
-#[test]
-fn test_end_to_end_multiple_users() {
+#[tokio::test]
+async fn test_end_to_end_multiple_users() {
     let (repository, _, command_handler, user_query) = setup_cqrs_system();
 
     // Create multiple users
     for i in 1..=5 {
         let cmd = RegisterUserCommand::new(i, format!("User{}", i)).expect("Valid command");
-        command_handler.handle_register_user(cmd).expect("Command should succeed");
+        command_handler.handle_register_user(cmd).await.expect("Command should succeed");
     }
 
     // Verify all users exist in read model
@@ -273,13 +273,13 @@ fn test_end_to_end_multiple_users() {
     }
 }
 
-#[test]
-fn test_eventual_consistency_read_after_write() {
+#[tokio::test]
+async fn test_eventual_consistency_read_after_write() {
     let (_, _, command_handler, user_query) = setup_cqrs_system();
 
     // Write side: Issue command
     let cmd = RegisterUserCommand::new(1, "Charlie".to_string()).expect("Valid command");
-    command_handler.handle_register_user(cmd).expect("Command should succeed");
+    command_handler.handle_register_user(cmd).await.expect("Command should succeed");
 
     // Read side: Query should immediately reflect (in-memory synchronous in this demo)
     let result = user_query.get_user(1).expect("Should find user");
@@ -287,17 +287,17 @@ fn test_eventual_consistency_read_after_write() {
     assert!(result.contains("ID: 1"));
 }
 
-#[test]
-fn test_duplicate_user_ids_overwrite() {
+#[tokio::test]
+async fn test_duplicate_user_ids_overwrite() {
     let (_, _, command_handler, user_query) = setup_cqrs_system();
 
     // Create user with ID 1
     let cmd1 = RegisterUserCommand::new(1, "Alice".to_string()).expect("Valid command");
-    command_handler.handle_register_user(cmd1).expect("Command should succeed");
+    command_handler.handle_register_user(cmd1).await.expect("Command should succeed");
 
     // Create another user with same ID (overwrite)
     let cmd2 = RegisterUserCommand::new(1, "Bob".to_string()).expect("Valid command");
-    command_handler.handle_register_user(cmd2).expect("Command should succeed");
+    command_handler.handle_register_user(cmd2).await.expect("Command should succeed");
 
     // Query should return the latest state
     let result = user_query.get_user(1).expect("Should find user");
@@ -336,23 +336,33 @@ impl TestEventSubscriber {
 
 #[async_trait]
 impl EventHandler for TestEventSubscriber {
-    async fn handle_event(&self, _event: &rust_composition::events::UserEvent) {
+    async fn handle_event(&self, _event: &rust_composition::events::UserEvent) -> Result<(), Box<dyn std::error::Error>> {
         let mut count = self.event_count.lock().unwrap();
         *count += 1;
+        Ok(())
+    }
+
+    fn priority(&self) -> rust_composition::events::event_bus::HandlerPriority {
+        rust_composition::events::event_bus::HandlerPriority::Normal
+    }
+
+    fn name(&self) -> &str {
+        "TestEventSubscriber"
     }
 }
 // ============================================================================
 // RENAME USER TESTS
 // ============================================================================
 
-#[test]
-fn test_rename_user_end_to_end() {
+#[tokio::test]
+async fn test_rename_user_end_to_end() {
     let (repository, _, command_handler, user_query) = setup_cqrs_system();
 
     // Register user first
     let register_cmd = RegisterUserCommand::new(1, "Alice".to_string()).expect("Valid command");
     command_handler
         .handle_register_user(register_cmd)
+        .await
         .expect("Register should succeed");
 
     // Verify initial state
@@ -363,6 +373,7 @@ fn test_rename_user_end_to_end() {
     let rename_cmd = RenameUserCommand::new(1, "Alicia".to_string()).expect("Valid command");
     command_handler
         .handle_rename_user(rename_cmd)
+        .await
         .expect("Rename should succeed");
 
     // Verify: Aggregate has new name
@@ -397,13 +408,13 @@ fn test_rename_whitespace_name_validation() {
     assert!(cmd.is_err(), "Whitespace-only name should fail validation");
 }
 
-#[test]
-fn test_rename_nonexistent_user_error() {
+#[tokio::test]
+async fn test_rename_nonexistent_user_error() {
     let (_, _, command_handler, _) = setup_cqrs_system();
 
     // Try to rename user that was never created
     let cmd = RenameUserCommand::new(999, "NewName".to_string()).expect("Valid command");
-    let result = command_handler.handle_rename_user(cmd);
+    let result = command_handler.handle_rename_user(cmd).await;
 
     // Should succeed at command level, but aggregate won't exist
     // (For strict validation, could require user to exist first)
@@ -413,20 +424,22 @@ fn test_rename_nonexistent_user_error() {
     );
 }
 
-#[test]
-fn test_aggregate_reconstruction_with_rename() {
+#[tokio::test]
+async fn test_aggregate_reconstruction_with_rename() {
     let (repository, _, command_handler, _) = setup_cqrs_system();
 
     // Register user
     let register_cmd = RegisterUserCommand::new(1, "Bob".to_string()).expect("Valid command");
     command_handler
         .handle_register_user(register_cmd)
+        .await
         .expect("Register should succeed");
 
     // Rename user
     let rename_cmd = RenameUserCommand::new(1, "Robert".to_string()).expect("Valid command");
     command_handler
         .handle_rename_user(rename_cmd)
+        .await
         .expect("Rename should succeed");
 
     // Reconstruct from event history
@@ -437,26 +450,29 @@ fn test_aggregate_reconstruction_with_rename() {
     assert_eq!(user.version, 1, "Should have version 1 after two events (0-indexed)");
 }
 
-#[test]
-fn test_multiple_renames_sequence() {
+#[tokio::test]
+async fn test_multiple_renames_sequence() {
     let (repository, _, command_handler, user_query) = setup_cqrs_system();
 
     // Register user
     let register_cmd = RegisterUserCommand::new(1, "Alice".to_string()).expect("Valid command");
     command_handler
         .handle_register_user(register_cmd)
+        .await
         .expect("Register should succeed");
 
     // First rename
     let rename_cmd1 = RenameUserCommand::new(1, "Alicia".to_string()).expect("Valid command");
     command_handler
         .handle_rename_user(rename_cmd1)
+        .await
         .expect("First rename should succeed");
 
     // Second rename
     let rename_cmd2 = RenameUserCommand::new(1, "Alice-Ann".to_string()).expect("Valid command");
     command_handler
         .handle_rename_user(rename_cmd2)
+        .await
         .expect("Second rename should succeed");
 
     // Verify final state
@@ -467,20 +483,22 @@ fn test_multiple_renames_sequence() {
     assert!(result.contains("Alice-Ann"), "Query should reflect final rename");
 }
 
-#[test]
-fn test_rename_preserves_user_id() {
+#[tokio::test]
+async fn test_rename_preserves_user_id() {
     let (repository, _, command_handler, _) = setup_cqrs_system();
 
     // Register user
     let register_cmd = RegisterUserCommand::new(42, "Name1".to_string()).expect("Valid command");
     command_handler
         .handle_register_user(register_cmd)
+        .await
         .expect("Register should succeed");
 
     // Rename user
     let rename_cmd = RenameUserCommand::new(42, "Name2".to_string()).expect("Valid command");
     command_handler
         .handle_rename_user(rename_cmd)
+        .await
         .expect("Rename should succeed");
 
     // Verify user ID unchanged

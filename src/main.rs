@@ -63,7 +63,7 @@ async fn main() {
         .expect("Command validation failed");
     println!("📝 Command: Create User '{}' (Async)", cmd1.name);
     
-    match command_handler.handle_register_user_async(cmd1).await {
+    match command_handler.handle_register_user(cmd1).await {
         Ok(()) => {
             println!("✓ Command processed asynchronously");
             println!("  - Aggregate created from command");
@@ -79,7 +79,7 @@ async fn main() {
         .expect("Command validation failed");
     println!("📝 Command: Create User '{}' (Async)", cmd2.name);
     
-    match command_handler.handle_register_user_async(cmd2).await {
+    match command_handler.handle_register_user(cmd2).await {
         Ok(()) => {
             println!("✓ Command processed asynchronously");
             println!("  - Aggregate created from command");
@@ -103,7 +103,7 @@ async fn main() {
         .expect("Command validation failed");
     println!("📝 Command: Rename User 1 to '{}' (Async)", rename_cmd.new_name);
     
-    match command_handler.handle_rename_user_async(rename_cmd).await {
+    match command_handler.handle_rename_user(rename_cmd).await {
         Ok(()) => {
             println!("✓ Command processed asynchronously");
             println!("  - Aggregate loaded from event history");

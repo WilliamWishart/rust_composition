@@ -7,7 +7,7 @@ use crate::domain::{Repository, IRepository, User};
 /// UserCommandHandler - CQRS write side handler
 /// Processes commands through aggregates (not directly to events)
 /// Follows m-r pattern: Command → Aggregate → Events → EventStore
-/// Supports both sync and async event publishing
+/// All methods are async - uses app's tokio runtime for proper concurrency
 pub struct UserCommandHandler {
     repository: Arc<Repository>,
     event_bus: EventBus,
@@ -27,9 +27,9 @@ impl UserCommandHandler {
         }
     }
 
-    /// Execute RegisterUserCommand (synchronous)
-    /// Uses blocking event publishing for backward compatibility
-    pub fn handle_register_user(&self, command: RegisterUserCommand) -> DomainResult<()> {
+    /// Execute RegisterUserCommand (asynchronous)
+    /// Publishes events with proper error handling and awaiting
+    pub async fn handle_register_user(&self, command: RegisterUserCommand) -> DomainResult<()> {
         self.logger.log(&format!(
             "Processing command: RegisterUser(id={}, name={})",
             command.user_id, command.name
@@ -42,10 +42,22 @@ impl UserCommandHandler {
         // Returns the events that were saved
         let saved_events = self.repository.save(&user, -1)?; // -1 indicates new aggregate
 
-        // Publish events synchronously (blocking) for backward compatibility
-        // In async contexts, use handle_register_user_async instead
+        // Publish events with proper error handling and awaiting
         for event in saved_events {
-            self.event_bus.publish_blocking(&event);
+            match self.event_bus.publish(&event).await {
+                Ok(errors) if errors.is_empty() => {},
+                Ok(errors) => {
+                    for err in errors {
+                        self.logger.log(&format!("Non-critical handler error: {}", err));
+                    }
+                }
+                Err(e) => {
+                    self.logger.log(&format!("Critical error publishing event: {}", e));
+                    return Err(crate::infrastructure::DomainError::RepositoryError(
+                        format!("Failed to publish event: {}", e)
+                    ));
+                }
+            }
         }
 
         self.logger
@@ -54,34 +66,9 @@ impl UserCommandHandler {
         Ok(())
     }
 
-    /// Execute RegisterUserCommand (asynchronous)
-    /// Non-blocking event publishing - recommended for high-throughput scenarios
-    pub async fn handle_register_user_async(&self, command: RegisterUserCommand) -> DomainResult<()> {
-        self.logger.log(&format!(
-            "Processing command (async): RegisterUser(id={}, name={})",
-            command.user_id, command.name
-        ));
-
-        // Create aggregate - this applies events internally
-        let user = User::new(command.user_id, command.name.clone());
-
-        // Save through repository (handles optimistic locking, persistence)
-        let saved_events = self.repository.save(&user, -1)?;
-
-        // Publish events asynchronously - non-blocking
-        for event in saved_events {
-            self.event_bus.publish(&event).await;
-        }
-
-        self.logger
-            .log(&format!("User {} registered successfully (async)", command.user_id));
-
-        Ok(())
-    }
-
-    /// Execute RenameUserCommand (synchronous)
-    /// Uses blocking event publishing for backward compatibility
-    pub fn handle_rename_user(&self, command: RenameUserCommand) -> DomainResult<()> {
+    /// Execute RenameUserCommand (asynchronous)
+    /// Publishes events with proper error handling and awaiting
+    pub async fn handle_rename_user(&self, command: RenameUserCommand) -> DomainResult<()> {
         self.logger.log(&format!(
             "Processing command: RenameUser(id={}, new_name={})",
             command.user_id, command.new_name
@@ -96,41 +83,26 @@ impl UserCommandHandler {
         // Save through repository (handles optimistic locking, persistence)
         let saved_events = self.repository.save(&user, user.version)?;
 
-        // Publish events synchronously (blocking) for backward compatibility
+        // Publish events with proper error handling and awaiting
         for event in saved_events {
-            self.event_bus.publish_blocking(&event);
+            match self.event_bus.publish(&event).await {
+                Ok(errors) if errors.is_empty() => {},
+                Ok(errors) => {
+                    for err in errors {
+                        self.logger.log(&format!("Non-critical handler error: {}", err));
+                    }
+                }
+                Err(e) => {
+                    self.logger.log(&format!("Critical error publishing event: {}", e));
+                    return Err(crate::infrastructure::DomainError::RepositoryError(
+                        format!("Failed to publish event: {}", e)
+                    ));
+                }
+            }
         }
 
         self.logger
             .log(&format!("User {} renamed successfully", command.user_id));
-
-        Ok(())
-    }
-
-    /// Execute RenameUserCommand (asynchronous)
-    /// Non-blocking event publishing - recommended for high-throughput scenarios
-    pub async fn handle_rename_user_async(&self, command: RenameUserCommand) -> DomainResult<()> {
-        self.logger.log(&format!(
-            "Processing command (async): RenameUser(id={}, new_name={})",
-            command.user_id, command.new_name
-        ));
-
-        // Load aggregate from history (event sourcing reconstruction)
-        let mut user = self.repository.get_by_id(command.user_id)?;
-
-        // Apply the rename to the aggregate
-        user.rename(command.new_name.clone());
-
-        // Save through repository (handles optimistic locking, persistence)
-        let saved_events = self.repository.save(&user, user.version)?;
-
-        // Publish events asynchronously - non-blocking
-        for event in saved_events {
-            self.event_bus.publish(&event).await;
-        }
-
-        self.logger
-            .log(&format!("User {} renamed successfully (async)", command.user_id));
 
         Ok(())
     }
