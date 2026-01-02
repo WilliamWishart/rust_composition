@@ -40,9 +40,19 @@ pub async fn register_user(
         payload.user_id
     ));
 
-    let command = RegisterUserCommand {
-        user_id: payload.user_id,
-        name: payload.name.clone(),
+    let command = match RegisterUserCommand::new(payload.user_id, payload.name.clone()) {
+        Ok(cmd) => cmd,
+        Err(err) => {
+            let error_msg = format!("{:?}", err);
+            state.logger.error(&format!("REST API: Invalid register user request: {}", error_msg));
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: error_msg,
+                }),
+            )
+                .into_response();
+        }
     };
 
     match state.command_handler.handle_register_user(command).await {
@@ -82,9 +92,19 @@ pub async fn rename_user(
         payload.user_id, payload.new_name
     ));
 
-    let command = RenameUserCommand {
-        user_id: payload.user_id,
-        new_name: payload.new_name.clone(),
+    let command = match RenameUserCommand::new(payload.user_id, payload.new_name.clone()) {
+        Ok(cmd) => cmd,
+        Err(err) => {
+            let error_msg = format!("{:?}", err);
+            state.logger.error(&format!("REST API: Invalid rename user request: {}", error_msg));
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: error_msg,
+                }),
+            )
+                .into_response();
+        }
     };
 
     match state.command_handler.handle_rename_user(command).await {
