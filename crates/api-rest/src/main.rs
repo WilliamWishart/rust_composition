@@ -1,5 +1,5 @@
 use axum::{
-    routing::{post, put},
+    routing::{post, put, get},
     Router,
 };
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use tower_http::cors::CorsLayer;
 use application::{EventBus, UserCommandHandler, ProjectionEventHandler};
 use infrastructure::{ConsoleLogger, LogLevel};
 use persistence::{EventStore, Repository, UserProjection};
-use api_rest::{handlers::{register_user, rename_user}, AppState};
+use api_rest::{handlers::{register_user, rename_user, get_user, get_all_users, find_user_by_name}, AppState};
 
 #[tokio::main]
 async fn main() {
@@ -25,7 +25,7 @@ async fn main() {
     event_bus.subscribe(projection_handler);
     
     // Create repository with both event store and projection
-    let repository = Arc::new(Repository::new(event_store, projection));
+    let repository = Arc::new(Repository::new(event_store, projection.clone()));
 
     // Create command handler
     let command_handler = Arc::new(UserCommandHandler::new(
@@ -36,13 +36,17 @@ async fn main() {
 
     let state = AppState {
         command_handler,
+        projection: projection.clone(),
         logger: logger.clone(),
     };
 
     // Build router with routes
     let app = Router::new()
         .route("/users", post(register_user))
+        .route("/users", get(get_all_users))
         .route("/users", put(rename_user))
+        .route("/users/:user_id", get(get_user))
+        .route("/users/search/:name", get(find_user_by_name))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

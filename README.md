@@ -23,6 +23,15 @@ curl -X POST http://127.0.0.1:3000/users \
   -H "Content-Type: application/json" \
   -d '{"user_id": 1, "name": "Alice"}'
 
+# Get all users
+curl http://127.0.0.1:3000/users
+
+# Get specific user
+curl http://127.0.0.1:3000/users/1
+
+# Search user by name
+curl http://127.0.0.1:3000/users/search/Alice
+
 # Rename user
 curl -X PUT http://127.0.0.1:3000/users \
   -H "Content-Type: application/json" \
@@ -68,8 +77,8 @@ Domain ← Infrastructure ← Persistence ← Application ← API-REST
 - **Event Sourcing**: Immutable event log with complete audit trail
 - **Async/Await**: Modern async handlers and EventBus
 - **Type Safety**: Unified AppError enum and DomainResult<T>
-- **Testing**: 31 tests passing (2 unit + 29 integration)
-- **REST API**: Full HTTP endpoints with error handling
+- **Testing**: 23 integration tests passing
+- **REST API**: Full HTTP endpoints (commands + queries) with error handling
 - **Logging**: Abstracted Logger trait with multiple implementations
 
 ## 📖 Documentation Structure
@@ -173,7 +182,7 @@ cargo test -- --nocapture
 - **Crates**: 5 independent crates
 - **Lines of Code**: 1,200+ (domain, infrastructure, persistence, application, api-rest)
 - **Documentation**: 2,582 lines across 5 markdown files
-- **Tests**: 2 unit + 29 integration (all passing ✅)
+- **Tests**: 23 integration tests (all passing ✅)
 - **Build Time**: ~1 second
 - **Compiler Warnings**: 0
 
