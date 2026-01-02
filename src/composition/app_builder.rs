@@ -18,7 +18,7 @@ impl AppBuilder {
     /// Create a new builder with production defaults
     pub fn new() -> Self {
         AppBuilder {
-            logger: Arc::new(ConsoleLogger),
+            logger: Arc::new(ConsoleLogger::default()),
         }
     }
 

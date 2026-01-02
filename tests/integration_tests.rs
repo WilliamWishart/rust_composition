@@ -235,11 +235,11 @@ async fn test_end_to_end_single_user_registration() {
     // Verify: Logging occurred
     let logs = logger.get_messages();
     assert!(
-        logs.iter().any(|log| log.contains("RegisterUser")),
+        logs.iter().any(|log| log.1.contains("RegisterUser")),
         "Should log command processing"
     );
     assert!(
-        logs.iter().any(|log| log.contains("registered successfully")),
+        logs.iter().any(|log| log.1.contains("registered successfully")),
         "Should log successful registration"
     );
 }

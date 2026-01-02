@@ -6,7 +6,7 @@ use std::fmt;
 /// - Zero runtime overhead (no vtable, no Arc)
 /// - Type safety without downcasting
 /// - Pattern matching instead of string comparisons
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UserEvent {
     Registered {
         user_id: u32,

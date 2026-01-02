@@ -30,7 +30,7 @@ impl UserCommandHandler {
     /// Execute RegisterUserCommand (asynchronous)
     /// Publishes events with proper error handling and awaiting
     pub async fn handle_register_user(&self, command: RegisterUserCommand) -> DomainResult<()> {
-        self.logger.log(&format!(
+        self.logger.info(&format!(
             "Processing command: RegisterUser(id={}, name={})",
             command.user_id, command.name
         ));
@@ -48,11 +48,11 @@ impl UserCommandHandler {
                 Ok(errors) if errors.is_empty() => {},
                 Ok(errors) => {
                     for err in errors {
-                        self.logger.log(&format!("Non-critical handler error: {}", err));
+                        self.logger.warn(&format!("Non-critical handler error: {}", err));
                     }
                 }
                 Err(e) => {
-                    self.logger.log(&format!("Critical error publishing event: {}", e));
+                    self.logger.error(&format!("Critical error publishing event: {}", e));
                     return Err(crate::infrastructure::DomainError::RepositoryError(
                         format!("Failed to publish event: {}", e)
                     ));
@@ -61,7 +61,7 @@ impl UserCommandHandler {
         }
 
         self.logger
-            .log(&format!("User {} registered successfully", command.user_id));
+            .info(&format!("User {} registered successfully", command.user_id));
 
         Ok(())
     }
@@ -69,7 +69,7 @@ impl UserCommandHandler {
     /// Execute RenameUserCommand (asynchronous)
     /// Publishes events with proper error handling and awaiting
     pub async fn handle_rename_user(&self, command: RenameUserCommand) -> DomainResult<()> {
-        self.logger.log(&format!(
+        self.logger.info(&format!(
             "Processing command: RenameUser(id={}, new_name={})",
             command.user_id, command.new_name
         ));
@@ -89,11 +89,11 @@ impl UserCommandHandler {
                 Ok(errors) if errors.is_empty() => {},
                 Ok(errors) => {
                     for err in errors {
-                        self.logger.log(&format!("Non-critical handler error: {}", err));
+                        self.logger.warn(&format!("Non-critical handler error: {}", err));
                     }
                 }
                 Err(e) => {
-                    self.logger.log(&format!("Critical error publishing event: {}", e));
+                    self.logger.error(&format!("Critical error publishing event: {}", e));
                     return Err(crate::infrastructure::DomainError::RepositoryError(
                         format!("Failed to publish event: {}", e)
                     ));
@@ -102,7 +102,7 @@ impl UserCommandHandler {
         }
 
         self.logger
-            .log(&format!("User {} renamed successfully", command.user_id));
+            .info(&format!("User {} renamed successfully", command.user_id));
 
         Ok(())
     }
