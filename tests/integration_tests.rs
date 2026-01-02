@@ -7,7 +7,7 @@ use rust_composition::{
     infrastructure::{MockLogger, DomainError},
     commands::{RegisterUserCommand, RenameUserCommand, UserCommandHandler},
     events::{EventStore, EventBus, EventHandler},
-    events::projections::{UserProjection, TypedUserProjectionHandler},
+    events::projections::{UserProjection, TypedUserProjectionHandler, TypedUserProjectionHandlerAdapter},
     queries::UserQuery,
     domain::{Repository, IRepository, User},
 };
@@ -28,8 +28,9 @@ fn setup_cqrs_system() -> (
 
     // Setup projection and subscribe to events
     let user_projection = UserProjection::new();
-    let projection_handler = Arc::new(TypedUserProjectionHandler::new(user_projection.clone()));
-    event_bus.subscribe(projection_handler);
+    let projection_handler = TypedUserProjectionHandler::new(user_projection.clone());
+    let adapter = Arc::new(TypedUserProjectionHandlerAdapter::new(projection_handler));
+    event_bus.subscribe(adapter);
 
     // Create command handler
     let command_handler = Arc::new(UserCommandHandler::new(
