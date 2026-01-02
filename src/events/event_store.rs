@@ -102,6 +102,25 @@ impl EventStore {
     pub fn dlq_size(&self) -> usize {
         self.dead_letter_queue.lock().unwrap().len()
     }
+
+    /// Find a user by name across all events
+    /// Reconstructs the latest state of all users and searches by name
+    /// This is a convenience method - production systems would use a projection index
+    pub fn find_user_by_name(&self, name: &str) -> crate::infrastructure::DomainResult<Option<crate::domain::User>> {
+        let events = self.events.lock().unwrap();
+        
+        // Build a map of latest user state by scanning all events
+        let mut users: HashMap<u32, crate::domain::User> = HashMap::new();
+        
+        for aggregate_events in events.values() {
+            if let Ok(user) = crate::domain::User::load_from_history(aggregate_events.clone()) {
+                users.insert(user.id, user);
+            }
+        }
+        
+        // Search for user by name (case-sensitive)
+        Ok(users.values().find(|u| u.name == name).cloned())
+    }
 }
 
 impl Default for EventStore {

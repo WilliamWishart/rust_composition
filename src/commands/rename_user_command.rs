@@ -11,14 +11,22 @@ pub struct RenameUserCommand {
 
 impl RenameUserCommand {
     pub fn new(user_id: u32, new_name: String) -> DomainResult<Self> {
+        // Name validation
         if new_name.is_empty() || new_name.trim().is_empty() {
-            return Err(DomainError::ValidationError(
+            return Err(DomainError::Validation(
                 "New name cannot be empty".to_string(),
             ));
         }
 
+        if new_name.len() > 255 {
+            return Err(DomainError::Validation(
+                "New name cannot exceed 255 characters".to_string(),
+            ));
+        }
+
+        // User ID validation
         if user_id == 0 {
-            return Err(DomainError::ValidationError(
+            return Err(DomainError::Validation(
                 "User ID must be greater than 0".to_string(),
             ));
         }

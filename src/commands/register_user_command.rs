@@ -11,14 +11,22 @@ pub struct RegisterUserCommand {
 
 impl RegisterUserCommand {
     pub fn new(user_id: u32, name: String) -> DomainResult<Self> {
+        // Name validation
         if name.trim().is_empty() {
-            return Err(DomainError::ValidationError(
+            return Err(DomainError::Validation(
                 "Name cannot be empty".to_string(),
             ));
         }
 
+        if name.len() > 255 {
+            return Err(DomainError::Validation(
+                "Name cannot exceed 255 characters".to_string(),
+            ));
+        }
+
+        // User ID validation
         if user_id == 0 {
-            return Err(DomainError::ValidationError(
+            return Err(DomainError::Validation(
                 "User ID must be greater than 0".to_string(),
             ));
         }

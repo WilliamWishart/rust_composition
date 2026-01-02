@@ -1,10 +1,14 @@
 use std::fmt;
+use std::error::Error;
 
-/// DomainError - Type-safe error handling for the domain layer
-/// Replaces String-based errors with a structured enum
-/// Enables pattern matching and specific error handling at call sites
+/// AppError - Unified error type across the entire application
+/// Consolidates DomainError, HandlerError, and PublishError into a single type
+/// Enables consistent error handling patterns and simpler error propagation
 #[derive(Debug, Clone, PartialEq)]
-pub enum DomainError {
+pub enum AppError {
+    /// Command or input validation failed
+    Validation(String),
+
     /// Concurrency violation: optimistic lock version mismatch
     ConcurrencyViolation {
         expected_version: i32,
@@ -14,23 +18,37 @@ pub enum DomainError {
     /// Aggregate not found in repository
     AggregateNotFound(u32),
 
-    /// Command validation failed
-    ValidationError(String),
-
-    /// Invalid or malformed command
-    InvalidCommand(String),
-
     /// Event sourcing/reconstruction failed
     EventReconstructionFailed(String),
 
     /// Repository operation failed
     RepositoryError(String),
+
+    /// Handler execution failed
+    HandlerError {
+        handler_name: String,
+        message: String,
+        is_critical: bool,
+    },
+
+    /// Event publishing failed
+    PublishError(String),
+
+    /// Lock poisoned (internal error)
+    LockPoisoned,
 }
 
-impl fmt::Display for DomainError {
+/// Legacy alias for backward compatibility during migration
+pub type DomainError = AppError;
+pub type DomainResult<T> = Result<T, AppError>;
+
+impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DomainError::ConcurrencyViolation {
+            AppError::Validation(msg) => {
+                write!(f, "Validation error: {}", msg)
+            }
+            AppError::ConcurrencyViolation {
                 expected_version,
                 actual_version,
             } => {
@@ -40,26 +58,31 @@ impl fmt::Display for DomainError {
                     expected_version, actual_version
                 )
             }
-            DomainError::AggregateNotFound(id) => {
+            AppError::AggregateNotFound(id) => {
                 write!(f, "Aggregate not found: {}", id)
             }
-            DomainError::ValidationError(msg) => {
-                write!(f, "Validation error: {}", msg)
-            }
-            DomainError::InvalidCommand(msg) => {
-                write!(f, "Invalid command: {}", msg)
-            }
-            DomainError::EventReconstructionFailed(msg) => {
+            AppError::EventReconstructionFailed(msg) => {
                 write!(f, "Event reconstruction failed: {}", msg)
             }
-            DomainError::RepositoryError(msg) => {
+            AppError::RepositoryError(msg) => {
                 write!(f, "Repository error: {}", msg)
+            }
+            AppError::HandlerError {
+                handler_name,
+                message,
+                is_critical,
+            } => {
+                let severity = if *is_critical { "CRITICAL" } else { "NON-CRITICAL" };
+                write!(f, "Handler '{}' failed [{}]: {}", handler_name, severity, message)
+            }
+            AppError::PublishError(msg) => {
+                write!(f, "Publish error: {}", msg)
+            }
+            AppError::LockPoisoned => {
+                write!(f, "Internal error: lock poisoned")
             }
         }
     }
 }
 
-impl std::error::Error for DomainError {}
-
-/// Convenience type alias for Results in the domain layer
-pub type DomainResult<T> = Result<T, DomainError>;
+impl Error for AppError {}

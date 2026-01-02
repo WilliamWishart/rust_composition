@@ -35,7 +35,7 @@ pub mod composition;
 pub use composition::AppBuilder;
 pub use domain::{Repository, IRepository};
 pub use infrastructure::{Logger, DomainError, DomainResult};
-pub use events::{EventStore, EventBus, EventHandler, UserEvent};
+pub use events::{EventStore, EventBus, EventHandler, UserEvent, EventEnvelope};
 pub use commands::{RegisterUserCommand, RenameUserCommand};
 pub use events::projections::TypedUserProjectionHandler;
 pub use queries::UserQuery;

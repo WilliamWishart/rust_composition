@@ -7,6 +7,10 @@ use crate::infrastructure::{DomainError, DomainResult};
 pub trait IRepository {
     fn save(&self, aggregate: &User, expected_version: i32) -> DomainResult<Vec<UserEvent>>;
     fn get_by_id(&self, id: u32) -> DomainResult<User>;
+    
+    /// Check if a user with the given name already exists
+    /// Used for enforcing business rules like "usernames must be unique"
+    fn find_by_name(&self, name: &str) -> DomainResult<Option<User>>;
 }
 
 /// Repository<User> - Concrete implementation
@@ -60,6 +64,22 @@ impl IRepository for Repository {
 
         // Reconstruct aggregate from history (event sourcing)
         User::load_from_history(events)
+    }
+
+    /// Find a user by name - enforces business rule: usernames must be unique
+    /// 
+    /// This is a business rule check implemented at the repository level.
+    /// In Event Sourcing, we need to scan all aggregates since the event store
+    /// is indexed by aggregate ID, not by business properties like name.
+    /// 
+    /// In a production system, you would typically:
+    /// 1. Maintain a read model projection indexed by name
+    /// 2. Or use a secondary index in your data store
+    /// 3. Or cache recently accessed users
+    fn find_by_name(&self, name: &str) -> DomainResult<Option<User>> {
+        // In this simplified implementation, we scan all users
+        // Production systems would use a projection or index
+        self.event_store.find_user_by_name(name)
     }
 }
 

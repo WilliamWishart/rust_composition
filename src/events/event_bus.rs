@@ -42,6 +42,13 @@ impl fmt::Display for PublishError {
 
 impl std::error::Error for PublishError {}
 
+// Convert PublishError to AppError for unified error handling
+impl From<PublishError> for crate::infrastructure::DomainError {
+    fn from(err: PublishError) -> Self {
+        crate::infrastructure::DomainError::PublishError(err.to_string())
+    }
+}
+
 /// HandlerPriority - Controls execution ordering and guarantees
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HandlerPriority {

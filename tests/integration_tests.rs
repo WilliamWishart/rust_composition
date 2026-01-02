@@ -67,7 +67,7 @@ fn test_empty_name_command_validation() {
     assert!(cmd.is_err(), "Command with empty name should fail validation");
     assert_eq!(
         cmd.unwrap_err(),
-        DomainError::ValidationError("Name cannot be empty".to_string())
+        DomainError::Validation("Name cannot be empty".to_string())
     );
 }
 
@@ -80,7 +80,7 @@ fn test_zero_id_command_validation() {
     assert!(cmd.is_err(), "Command with zero ID should fail validation");
     assert_eq!(
         cmd.unwrap_err(),
-        DomainError::ValidationError("User ID must be greater than 0".to_string())
+        DomainError::Validation("User ID must be greater than 0".to_string())
     );
 }
 
@@ -93,7 +93,7 @@ fn test_rename_user_command_validation() {
     assert!(cmd.is_err(), "Command with empty name should fail validation");
     assert_eq!(
         cmd.unwrap_err(),
-        DomainError::ValidationError("New name cannot be empty".to_string())
+        DomainError::Validation("New name cannot be empty".to_string())
     );
 }
 
@@ -103,7 +103,7 @@ fn test_rename_user_command_validation() {
 
 #[test]
 fn test_aggregate_creates_event_on_new() {
-    let user = User::new(1, "Alice".to_string());
+    let user = User::new(1, "Alice".to_string()).expect("Should create user");
 
     assert_eq!(user.id, 1);
     assert_eq!(user.name, "Alice");
@@ -114,7 +114,7 @@ fn test_aggregate_creates_event_on_new() {
 #[test]
 fn test_aggregate_load_from_history() {
     // Create a user and get its events
-    let user1 = User::new(1, "Alice".to_string());
+    let user1 = User::new(1, "Alice".to_string()).expect("Should create user");
     let events = user1.get_uncommitted_changes();
 
     // Load a new user from that history
@@ -132,7 +132,7 @@ fn test_aggregate_load_from_history() {
 fn test_repository_saves_events() {
     let (repository, _, _, _) = setup_cqrs_system();
 
-    let user = User::new(1, "Alice".to_string());
+    let user = User::new(1, "Alice".to_string()).expect("Should create user");
     let result = repository.save(&user, -1);
 
     assert!(result.is_ok(), "Save should succeed");
@@ -144,7 +144,7 @@ fn test_repository_retrieves_saved_aggregate() {
     let (repository, _, _, _) = setup_cqrs_system();
 
     // Save an aggregate
-    let user1 = User::new(1, "Alice".to_string());
+    let user1 = User::new(1, "Alice".to_string()).expect("Should create user");
     repository.save(&user1, -1).expect("Save should succeed");
 
     // Retrieve it
@@ -178,7 +178,7 @@ async fn test_eventbus_subscribers_receive_events() {
     event_bus.subscribe(test_subscriber.clone());
 
     // Issue a command
-    let user = User::new(1, "Alice".to_string());
+    let user = User::new(1, "Alice".to_string()).expect("Should create user");
     let events = repository.save(&user, -1).expect("Save should succeed");
 
     // Publish events asynchronously
@@ -395,7 +395,7 @@ fn test_rename_empty_name_validation() {
     assert!(cmd.is_err(), "Empty name should fail validation");
     assert_eq!(
         cmd.unwrap_err(),
-        DomainError::ValidationError("New name cannot be empty".to_string())
+        DomainError::Validation("New name cannot be empty".to_string())
     );
 }
 

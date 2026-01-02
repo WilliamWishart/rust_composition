@@ -5,8 +5,10 @@ pub mod event_store;
 pub mod event_bus;
 pub mod projections;
 pub mod user_events;
+pub mod event_envelope;
 
 pub use event_store::EventStore;
 pub use event_bus::{EventBus, EventHandler};
 pub use projections::UserProjection;
 pub use user_events::UserEvent;
+pub use event_envelope::EventEnvelope;
