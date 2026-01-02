@@ -1,9 +1,25 @@
+[workspace]
+members = [
+    "crates/domain",
+    "crates/infrastructure",
+    "crates/persistence",
+    "crates/application",
+    "crates/api-rest",
+]
+resolver = "2"
+
 [package]
 name = "rust_composition"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# Re-export main crates for convenience
+domain = { path = "crates/domain" }
+infrastructure = { path = "crates/infrastructure" }
+persistence = { path = "crates/persistence" }
+application = { path = "crates/application" }
+
 uuid = { version = "1.6", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["full"] }

@@ -1,0 +1,12 @@
+[package]
+name = "application"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+domain = { path = "../domain" }
+infrastructure = { path = "../infrastructure" }
+persistence = { path = "../persistence" }
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }

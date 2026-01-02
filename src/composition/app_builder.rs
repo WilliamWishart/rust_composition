@@ -1,15 +1,15 @@
 use std::sync::Arc;
-use crate::infrastructure::{Logger, ConsoleLogger};
+use infrastructure::{Logger, ConsoleLogger, LogLevel};
 
 /// AppBuilder - Composition Root
 /// Centralizes dependency wiring and application composition
 /// This is the only place that knows about concrete implementations
 ///
-/// The proper composition pattern for CQRS:
-/// 1. Setup infrastructure (Logger, EventStore)
-/// 2. Create write side: Repository + EventStore → CommandHandler
-/// 3. Create read side: UserProjection + EventBus → UserQuery
-/// 4. Wire them together via EventBus
+/// Example usage:
+/// ```ignore
+/// let builder = AppBuilder::new();
+/// let logger = builder.get_logger();
+/// ```
 pub struct AppBuilder {
     logger: Arc<dyn Logger>,
 }
@@ -18,7 +18,7 @@ impl AppBuilder {
     /// Create a new builder with production defaults
     pub fn new() -> Self {
         AppBuilder {
-            logger: Arc::new(ConsoleLogger::default()),
+            logger: Arc::new(ConsoleLogger::new(LogLevel::Info)),
         }
     }
 
