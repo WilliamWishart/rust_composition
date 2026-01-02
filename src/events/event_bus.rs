@@ -2,8 +2,9 @@ use std::sync::{Arc, Mutex};
 use crate::events::UserEvent;
 use async_trait::async_trait;
 use std::fmt;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use crate::infrastructure::logger::Logger;
+use crate::infrastructure::MetricsRegistry;
 
 /// HandlerError - Error information from a failed event handler
 #[derive(Debug, Clone)]
@@ -91,11 +92,13 @@ impl Default for RetryConfig {
 /// - Retry logic: transient failures automatically retry with exponential backoff
 /// - Dead letter queue: failed events recorded for inspection and replay
 /// - Structured logging: all operations logged at appropriate severity levels
+/// - Metrics: comprehensive handler performance tracking
 #[derive(Clone)]
 pub struct EventBus {
     subscribers: Arc<Mutex<Vec<Arc<dyn EventHandler>>>>,
     retry_config: RetryConfig,
     logger: Arc<dyn Logger>,
+    metrics: MetricsRegistry,
 }
 
 impl EventBus {
@@ -104,6 +107,7 @@ impl EventBus {
             subscribers: Arc::new(Mutex::new(Vec::new())),
             retry_config: RetryConfig::default(),
             logger: Arc::new(crate::infrastructure::logger::ConsoleLogger::default()),
+            metrics: MetricsRegistry::new(),
         }
     }
     
@@ -115,6 +119,11 @@ impl EventBus {
     pub fn with_logger(mut self, logger: Arc<dyn Logger>) -> Self {
         self.logger = logger;
         self
+    }
+    
+    /// Access the metrics registry for performance monitoring
+    pub fn metrics(&self) -> &MetricsRegistry {
+        &self.metrics
     }
 
     /// Register a subscriber to receive events
@@ -174,6 +183,7 @@ impl EventBus {
         // Phase 2 & 3: Spawn high and normal priority handlers concurrently with retry logic
         let logger = Arc::clone(&self.logger);
         let retry_config = self.retry_config.clone();
+        let metrics = self.metrics.clone();
         let handles: Vec<_> = high_handlers
             .into_iter()
             .chain(normal_handlers.into_iter())
@@ -182,8 +192,9 @@ impl EventBus {
                 let handler_name = handler.name().to_string();
                 let logger = Arc::clone(&logger);
                 let retry_config = retry_config.clone();
+                let metrics = metrics.clone();
                 tokio::spawn(async move {
-                    match Self::execute_with_retry(&handler, &event, &retry_config, &logger, &handler_name).await {
+                    match Self::execute_with_retry(&handler, &event, &retry_config, &logger, &handler_name, &metrics).await {
                         Ok(()) => None,
                         Err(e) => Some(HandlerError {
                             handler_name,
@@ -200,9 +211,10 @@ impl EventBus {
             let event = event.clone();
             let logger = Arc::clone(&self.logger);
             let retry_config = self.retry_config.clone();
+            let metrics = self.metrics.clone();
             let handler_name = handler.name().to_string();
             tokio::spawn(async move {
-                let _ = Self::execute_with_retry(&handler, &event, &retry_config, &logger, &handler_name).await;
+                let _ = Self::execute_with_retry(&handler, &event, &retry_config, &logger, &handler_name, &metrics).await;
             });
         }
         
@@ -231,14 +243,19 @@ impl EventBus {
     ) -> Result<(), HandlerError> {
         let handler_name = handler.name().to_string();
         let timeout_duration = Duration::from_secs(30);
+        let start = Instant::now();
         
         match tokio::time::timeout(timeout_duration, handler.handle_event(event)).await {
             Ok(Ok(())) => {
-                self.logger.debug(&format!("Handler '{}' succeeded", handler_name));
+                let duration_ms = start.elapsed().as_millis() as u64;
+                self.metrics.record_success(&handler_name, duration_ms);
+                self.logger.debug(&format!("Handler '{}' succeeded in {}ms", handler_name, duration_ms));
                 Ok(())
             }
             Ok(Err(e)) => {
-                self.logger.warn(&format!("Handler '{}' failed: {}", handler_name, e));
+                let duration_ms = start.elapsed().as_millis() as u64;
+                self.metrics.record_failure(&handler_name, duration_ms);
+                self.logger.warn(&format!("Handler '{}' failed after {}ms: {}", handler_name, duration_ms, e));
                 Err(HandlerError {
                     handler_name,
                     error_message: e.to_string(),
@@ -246,6 +263,8 @@ impl EventBus {
                 })
             }
             Err(_) => {
+                let _duration_ms = start.elapsed().as_millis() as u64;
+                self.metrics.record_timeout(&handler_name);
                 self.logger.error(&format!("Handler '{}' exceeded 30 second timeout", handler_name));
                 Err(HandlerError {
                     handler_name,
@@ -263,34 +282,47 @@ impl EventBus {
         retry_config: &RetryConfig,
         logger: &Arc<dyn Logger>,
         handler_name: &str,
+        metrics: &MetricsRegistry,
     ) -> Result<(), String> {
         let mut delay_ms = retry_config.initial_delay_ms;
+        let start = Instant::now();
         
         for attempt in 0..=retry_config.max_retries {
             // Execute with timeout
             let timeout_duration = Duration::from_secs(30);
             match tokio::time::timeout(timeout_duration, handler.handle_event(event)).await {
                 Ok(Ok(())) => {
+                    let duration_ms = start.elapsed().as_millis() as u64;
+                    metrics.record_success(handler_name, duration_ms);
                     if attempt > 0 {
-                        logger.info(&format!("Handler '{}' succeeded after {} retries", handler_name, attempt));
+                        metrics.record_retry_success(handler_name);
+                        logger.info(&format!("Handler '{}' succeeded after {} retries in {}ms", handler_name, attempt, duration_ms));
                     }
                     return Ok(());
                 }
                 Ok(Err(err)) => {
                     // Convert error to string immediately to drop the Box<dyn Error>
                     let error_msg = err.to_string();
-                    if attempt >= retry_config.max_retries {
-                        logger.error(&format!("Handler '{}' failed after {} attempts: {}", handler_name, attempt + 1, error_msg));
+                    if attempt < retry_config.max_retries {
+                        metrics.record_retry(handler_name);
+                        logger.warn(&format!("Handler '{}' attempt {} failed: {}, retrying...", handler_name, attempt + 1, error_msg));
+                    } else {
+                        let duration_ms = start.elapsed().as_millis() as u64;
+                        metrics.record_failure(handler_name, duration_ms);
+                        metrics.record_retry_failure(handler_name);
+                        logger.error(&format!("Handler '{}' failed after {} attempts in {}ms: {}", handler_name, attempt + 1, duration_ms, error_msg));
                         return Err(error_msg);
                     }
-                    logger.warn(&format!("Handler '{}' attempt {} failed: {}, retrying...", handler_name, attempt + 1, error_msg));
                 }
                 Err(_) => {
-                    if attempt >= retry_config.max_retries {
+                    if attempt < retry_config.max_retries {
+                        metrics.record_retry(handler_name);
+                        logger.warn(&format!("Handler '{}' attempt {} timed out, retrying...", handler_name, attempt + 1));
+                    } else {
+                        metrics.record_timeout(handler_name);
                         logger.error(&format!("Handler '{}' failed after {} attempts: timeout", handler_name, attempt + 1));
                         return Err("Timeout: exceeded 30 second limit".to_string());
                     }
-                    logger.warn(&format!("Handler '{}' attempt {} timed out, retrying...", handler_name, attempt + 1));
                 }
             }
             

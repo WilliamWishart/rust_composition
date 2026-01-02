@@ -3,6 +3,8 @@
 
 pub mod logger;
 pub mod errors;
+pub mod metrics;
 
 pub use logger::{Logger, ConsoleLogger, MockLogger};
 pub use errors::{DomainError, DomainResult};
+pub use metrics::{HandlerMetrics, MetricsRegistry, MetricsSummary};
