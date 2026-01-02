@@ -1,8 +1,6 @@
 # Enterprise-Scale Rust Application - DDD/CQRS/Event Sourcing
 
-> **📚 Learning Example** - This is an educational project designed to teach and demonstrate **Dependency Injection (DI)**, **Domain-Driven Design (DDD)**, **CQRS** (Command Query Responsibility Segregation), and **Event Sourcing** patterns in Rust. It serves as a reference for how to structure large-scale, enterprise applications.
-
-A comprehensive example demonstrating best practices for organizing large Rust applications using **Domain-Driven Design** combined with **CQRS** and **Event Sourcing** to achieve eventual consistency and scalability.
+> **📚 Learning Example** - This is an educational project to support learning of **Dependency Injection (DI)**, **Domain-Driven Design (DDD)**, **CQRS** (Command Query Responsibility Segregation), and **Event Sourcing** patterns in Rust. It aims to act as a potential reference for how to structure large-scale, enterprise applications.
 
 ## 📁 Project Structure
 
@@ -14,15 +12,13 @@ rust_composition/
 │   ├── main.rs                         # Application entry point (thin wrapper)
 │   ├── infrastructure/                 # External dependencies & adapters
 │   │   ├── mod.rs                      # Module definition & re-exports
-│   │   ├── logger.rs                   # Logger trait & implementations
-│   │   └── database.rs                 # Database trait & implementations
+│   │   └── logger.rs                   # Logger trait & implementations
 │   ├── domain/                         # Business logic (core domain)
 │   │   ├── mod.rs                      # Module definition & re-exports
 │   │   ├── user_repository.rs          # Data access abstraction
 │   │   └── user_aggregate.rs           # Domain models (User aggregate)
 │   ├── events/                         # Event Sourcing (immutable event log)
 │   │   ├── mod.rs                      # Module definition & re-exports
-│   │   ├── domain_events.rs            # Domain event definitions
 │   │   ├── event_store.rs              # Event store (source of truth)
 │   │   ├── event_bus.rs                # Event bus (pub/sub)
 │   │   └── projections.rs              # Read models (eventual consistency)
@@ -70,7 +66,6 @@ This project follows a **Layered Architecture** with **CQRS** and **Event Sourci
 
 **Files:**
 - `logger.rs` - Logger trait with `ConsoleLogger` and `MockLogger` implementations
-- `database.rs` - Database trait with `MockDatabase` implementation
 
 **Key Principle:** 
 - Contains **traits** that define "what" (contracts)
@@ -103,40 +98,65 @@ Contains the core business logic and domain models - the "heart" of your applica
 - Represents your business rules and entities
 
 ```rust
-// Domain knows about Logger trait, not ConsoleLogger
-pub struct UserRepository {
-    logger: Arc<dyn Logger>,  // Injected abstraction
-    db: Arc<dyn Database>,
-}
-```
-
-### 3. **Application Layer** (`src/application/`)
-
-Orchestrates the domain logic and implements use cases.
-
-**Files:**
-- `user_service.rs` - Application service with use case methods
-
-**Key Principle:**
-- Coordinates between domain and infrastructure
-- Implements specific business use cases
-- Thin logic layer - delegates to domain
-- Depends on domain and infrastructure traits
-
-```rust
-pub struct UserService {
-    repository: Arc<UserRepository>,
-    logger: Arc<dyn Logger>,
+// In CQRS, repositories use event sourcing:
+pub struct Repository {
+    event_store: EventStore,
 }
 
-impl UserService {
-    pub fn register_user(&self, id: u32, name: &str) {
-        // Orchestrates domain and infrastructure
+impl IRepository for Repository {
+    fn save(&self, aggregate: &User, expected_version: i32) -> Result<Vec<UserEvent>, String> {
+        // Save events, not snapshots
+    }
+    fn get_by_id(&self, id: u32) -> Result<User, String> {
+        // Load from event history
     }
 }
 ```
 
-### 4. **Composition Root Layer** (`src/composition/`)
+### 3. **Commands Layer** (`src/commands/`)
+
+CQRS write-side handlers that process commands through aggregates.
+
+**Files:**
+- `register_user_command.rs` - Command definitions with validation
+- `command_handler.rs` - Handlers that apply commands to aggregates
+
+**Key Principle:**
+- Commands represent intentions to change state
+- Commands are validated before processing
+- Processing produces domain events
+- Events are published via EventBus
+
+```rust
+pub struct UserCommandHandler {
+    repository: Arc<Repository>,
+    event_bus: EventBus,
+    logger: Arc<dyn Logger>,
+}
+
+impl UserCommandHandler {
+    pub fn handle_register_user(&self, command: RegisterUserCommand) -> Result<(), String> {
+        let user = User::new(command.user_id, command.name);
+        self.repository.save(&user, -1)?;
+        // Events published via EventBus
+    }
+}
+```
+
+### 4. **Queries Layer** (`src/queries/`)
+
+CQRS read-side handlers that query from projections (read models).
+
+**Files:**
+- `user_queries.rs` - Query handlers for read-side
+
+**Key Principle:**
+- Queries read from eventually-consistent projections
+- Never modify state
+- Multiple projections can exist for different use cases
+- Queries are fast because read models are optimized for reading
+
+### 5. **Composition Root Layer** (`src/composition/`)
 
 The **only place that knows about concrete implementations**. Responsible for wiring all dependencies.
 
@@ -150,13 +170,14 @@ The **only place that knows about concrete implementations**. Responsible for wi
 - Uses the Builder pattern for fluent API
 
 ```rust
-let app = AppBuilder::new()
-    .with_logger(Arc::new(ConsoleLogger))
-    .with_database(Arc::new(MockDatabase))
-    .build_user_service();
+let logger = Arc::new(MockLogger::new());
+let event_store = EventStore::new();
+let event_bus = EventBus::new();
+let repository = Arc::new(Repository::new(event_store));
+let command_handler = UserCommandHandler::new(repository, event_bus, logger);
 ```
 
-### 5. **Application Entry Point** (`src/main.rs`)
+### 6. **Application Entry Point** (`src/main.rs`)
 
 Kept intentionally thin. Only responsible for:
 1. Initializing the composition root
@@ -167,21 +188,20 @@ Kept intentionally thin. Only responsible for:
 - Uses builder to wire dependencies
 - No business logic here
 
-## 🔄 Dependency Flow
+## 🔄 Data Flow (CQRS + Event Sourcing)
 
-Dependencies flow **inward**, never outward:
-
+**Write Side (Commands):**
 ```
-main.rs
-   ↓
-AppBuilder (Composition Root)
-   ↓
-UserService (Application)
-   ↓
-UserRepository (Domain) + Logger/Database (Infrastructure)
+Command → CommandHandler → Aggregate → Event → Repository → EventStore → EventBus
 ```
 
-Each layer depends only on layers below it through **trait abstractions**, never on concrete implementations above it.
+**Read Side (Queries):**
+```
+EventBus → Projections → Query → Response
+```
+
+**Dependency Direction:**
+All dependencies point toward the domain layer. Layers depend on abstractions (traits), not concrete implementations.
 
 ## 🧪 Testing Strategy
 
@@ -208,73 +228,76 @@ app.register_user(1, "Alice");
 
 ## 🚀 How to Extend
 
-### Adding a New Feature
+### Adding a New Command
 
-Example: Add email notification capability
+Example: Add "DeactivateUserCommand"
 
-**Step 1:** Define abstraction in Infrastructure
+**Step 1:** Create the command
 ```rust
-// src/infrastructure/email.rs
-pub trait EmailService: Send + Sync {
-    fn send(&self, email: &str, message: &str);
+// src/commands/deactivate_user_command.rs
+pub struct DeactivateUserCommand {
+    pub user_id: u32,
+    pub reason: String,
 }
 
-pub struct MockEmailService;
-impl EmailService for MockEmailService { ... }
-```
-
-**Step 2:** Update Infrastructure exports
-```rust
-// src/infrastructure/mod.rs
-pub mod email;
-pub use email::{EmailService, MockEmailService};
-```
-
-**Step 3:** Inject into Domain/Application
-```rust
-// src/application/user_service.rs
-pub struct UserService {
-    repository: Arc<UserRepository>,
-    logger: Arc<dyn Logger>,
-    email_service: Arc<dyn EmailService>,  // NEW
-}
-
-impl UserService {
-    pub fn register_user(&self, id: u32, name: &str, email: &str) {
-        self.repository.save_user(id, name);
-        self.email_service.send(email, "Welcome!");
+impl DeactivateUserCommand {
+    pub fn new(user_id: u32, reason: String) -> Result<Self, String> {
+        if user_id == 0 { return Err("Invalid ID".into()); }
+        Ok(DeactivateUserCommand { user_id, reason })
     }
 }
 ```
 
-**Step 4:** Update Composition Root
+**Step 2:** Add event variant
 ```rust
-// src/composition/app_builder.rs
-pub struct AppBuilder {
-    logger: Arc<dyn Logger>,
-    database: Arc<dyn Database>,
-    email_service: Arc<dyn EmailService>,  // NEW
+// src/events/user_events.rs
+pub enum UserEvent {
+    Registered { user_id: u32, name: String, timestamp: i64 },
+    Renamed { user_id: u32, new_name: String, timestamp: i64 },
+    Deactivated { user_id: u32, reason: String, timestamp: i64 },  // NEW
 }
+```
 
-impl AppBuilder {
-    pub fn with_email_service(mut self, svc: Arc<dyn EmailService>) -> Self {
-        self.email_service = svc;
-        self
-    }
-    
-    pub fn build_user_service(self) -> UserService {
-        let repository = Arc::new(UserRepository::new(...));
-        UserService::new(repository, self.logger, self.email_service)
+**Step 3:** Add aggregate method
+```rust
+// src/domain/user_aggregate.rs
+impl User {
+    pub fn deactivate(&mut self, reason: String) {
+        let event = UserEvent::Deactivated {
+            user_id: self.id,
+            reason,
+            timestamp: chrono::Utc::now().timestamp_millis(),
+        };
+        self.apply_event(&event);
+        self.uncommitted_changes.push(event);
     }
 }
 ```
 
-**Step 5:** Use in main.rs
+**Step 4:** Add handler
 ```rust
-let app = AppBuilder::new()
-    .with_email_service(Arc::new(MockEmailService))
-    .build_user_service();
+// src/commands/command_handler.rs
+impl UserCommandHandler {
+    pub fn handle_deactivate_user(&self, cmd: DeactivateUserCommand) -> Result<(), String> {
+        let mut user = self.repository.get_by_id(cmd.user_id)?;
+        user.deactivate(cmd.reason);
+        self.repository.save(&user, user.version)?;
+        Ok(())
+    }
+}
 ```
+
+**Step 5:** Update projection
+```rust
+// src/events/projections.rs
+impl TypedUserProjectionHandler {
+    fn handle_user_deactivated(&self, user_id: u32) {
+        // Update or remove from projection
+    }
+}
+```
+
+The new command flows through the entire CQRS pipeline automatically!
 
 ## 🎯 CQRS + Event Sourcing Pattern
 
@@ -296,7 +319,6 @@ This architecture implements **CQRS** (Command Query Responsibility Segregation)
 
 ### Event Sourcing
 - `events/event_store.rs` - Immutable event log (source of truth)
-- `events/domain_events.rs` - Domain event definitions
 - `events/event_bus.rs` - Pub/sub for event distribution
 - `events/projections.rs` - Read models built from events
 
