@@ -12,6 +12,7 @@ use rust_composition::{
     domain::{Repository, IRepository, User},
 };
 use std::sync::Arc;
+use async_trait::async_trait;
 
 /// Helper function to setup the complete CQRS system
 fn setup_cqrs_system() -> (
@@ -166,8 +167,8 @@ fn test_repository_fails_on_missing_aggregate() {
 // EVENT BUS & PROJECTION TESTS
 // ============================================================================
 
-#[test]
-fn test_eventbus_subscribers_receive_events() {
+#[tokio::test]
+async fn test_eventbus_subscribers_receive_events() {
     let event_store = EventStore::new();
     let event_bus = EventBus::new();
     let repository = Arc::new(Repository::new(event_store));
@@ -180,9 +181,9 @@ fn test_eventbus_subscribers_receive_events() {
     let user = User::new(1, "Alice".to_string());
     let events = repository.save(&user, -1).expect("Save should succeed");
 
-    // Publish events
+    // Publish events asynchronously
     for event in events {
-        event_bus.publish(&event);
+        event_bus.publish(&event).await;
     }
 
     // Verify subscriber received the event
@@ -333,8 +334,9 @@ impl TestEventSubscriber {
     }
 }
 
+#[async_trait]
 impl EventHandler for TestEventSubscriber {
-    fn handle_event(&self, _event: &rust_composition::events::UserEvent) {
+    async fn handle_event(&self, _event: &rust_composition::events::UserEvent) {
         let mut count = self.event_count.lock().unwrap();
         *count += 1;
     }
