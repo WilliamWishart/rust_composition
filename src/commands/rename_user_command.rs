@@ -1,3 +1,5 @@
+use crate::infrastructure::{DomainError, DomainResult};
+
 /// RenameUserCommand - Command to rename an existing user
 /// Commands are imperative - they express intent to change state
 /// Commands can be rejected (validation)
@@ -8,10 +10,19 @@ pub struct RenameUserCommand {
 }
 
 impl RenameUserCommand {
-    pub fn new(user_id: u32, new_name: String) -> Result<Self, String> {
+    pub fn new(user_id: u32, new_name: String) -> DomainResult<Self> {
         if new_name.is_empty() || new_name.trim().is_empty() {
-            return Err("New name cannot be empty".to_string());
+            return Err(DomainError::ValidationError(
+                "New name cannot be empty".to_string(),
+            ));
         }
+
+        if user_id == 0 {
+            return Err(DomainError::ValidationError(
+                "User ID must be greater than 0".to_string(),
+            ));
+        }
+
         Ok(RenameUserCommand { user_id, new_name })
     }
 }

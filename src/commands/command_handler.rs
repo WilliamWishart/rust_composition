@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use crate::commands::{RegisterUserCommand, RenameUserCommand};
 use crate::events::EventBus;
-use crate::infrastructure::Logger;
+use crate::infrastructure::{Logger, DomainResult};
 use crate::domain::{Repository, IRepository, User};
 
 /// UserCommandHandler - CQRS write side handler
@@ -32,20 +32,11 @@ impl UserCommandHandler {
     /// 3. Save aggregate (persists event via repository)
     /// 4. Publish event for eventual consistency
     /// Returns the published events so caller can update read models
-    pub fn handle_register_user(&self, command: RegisterUserCommand) -> Result<(), String> {
+    pub fn handle_register_user(&self, command: RegisterUserCommand) -> DomainResult<()> {
         self.logger.log(&format!(
             "Processing command: RegisterUser(id={}, name={})",
             command.user_id, command.name
         ));
-
-        // Validate command (commands can fail)
-        if command.name.is_empty() {
-            return Err("Name cannot be empty".to_string());
-        }
-
-        if command.user_id == 0 {
-            return Err("User ID must be greater than 0".to_string());
-        }
 
         // Create aggregate - this applies events internally
         let user = User::new(command.user_id, command.name.clone());
@@ -71,20 +62,11 @@ impl UserCommandHandler {
     /// 3. Apply rename to aggregate (which produces UserRenamedEvent)
     /// 4. Save aggregate (persists event via repository)
     /// 5. Publish event for eventual consistency
-    pub fn handle_rename_user(&self, command: RenameUserCommand) -> Result<(), String> {
+    pub fn handle_rename_user(&self, command: RenameUserCommand) -> DomainResult<()> {
         self.logger.log(&format!(
             "Processing command: RenameUser(id={}, new_name={})",
             command.user_id, command.new_name
         ));
-
-        // Validate command (commands can fail)
-        if command.new_name.is_empty() {
-            return Err("New name cannot be empty".to_string());
-        }
-
-        if command.user_id == 0 {
-            return Err("User ID must be greater than 0".to_string());
-        }
 
         // Load aggregate from history (event sourcing reconstruction)
         let mut user = self.repository.get_by_id(command.user_id)?;

@@ -1,4 +1,5 @@
 use crate::events::UserEvent;
+use crate::infrastructure::DomainResult;
 use std::fmt;
 
 /// User Aggregate - AggregateRoot pattern from m-r
@@ -75,7 +76,7 @@ impl User {
 
     /// Load aggregate from event history (event sourcing reconstruction)
     /// Pure pattern matching - no downcasting, no runtime type checks needed!
-    pub fn load_from_history(events: Vec<UserEvent>) -> Result<Self, String> {
+    pub fn load_from_history(events: Vec<UserEvent>) -> DomainResult<Self> {
         let mut user = User {
             id: 0,
             name: String::new(),

@@ -4,7 +4,7 @@
 /// Command → Aggregate → EventStore → EventBus → Projection → Query
 
 use rust_composition::{
-    infrastructure::MockLogger,
+    infrastructure::{MockLogger, DomainError},
     commands::{RegisterUserCommand, RenameUserCommand, UserCommandHandler},
     events::{EventStore, EventBus, EventHandler},
     events::projections::{UserProjection, TypedUserProjectionHandler},
@@ -64,18 +64,23 @@ fn test_empty_name_command_validation() {
     let cmd = RegisterUserCommand::new(1, "".to_string());
 
     assert!(cmd.is_err(), "Command with empty name should fail validation");
-    assert_eq!(cmd.unwrap_err(), "Name cannot be empty");
+    assert_eq!(
+        cmd.unwrap_err(),
+        DomainError::ValidationError("Name cannot be empty".to_string())
+    );
 }
 
 #[test]
 fn test_zero_id_command_validation() {
-    let (_, _, command_handler, _) = setup_cqrs_system();
+    let (_, _, _command_handler, _) = setup_cqrs_system();
 
-    let cmd = RegisterUserCommand::new(0, "Alice".to_string()).expect("Command created");
-    let result = command_handler.handle_register_user(cmd);
+    let cmd = RegisterUserCommand::new(0, "Alice".to_string());
 
-    assert!(result.is_err(), "Command with zero ID should fail on handler");
-    assert_eq!(result.unwrap_err(), "User ID must be greater than 0");
+    assert!(cmd.is_err(), "Command with zero ID should fail validation");
+    assert_eq!(
+        cmd.unwrap_err(),
+        DomainError::ValidationError("User ID must be greater than 0".to_string())
+    );
 }
 
 #[test]
@@ -85,7 +90,10 @@ fn test_rename_user_command_validation() {
     let cmd = RenameUserCommand::new(1, "".to_string());
 
     assert!(cmd.is_err(), "Command with empty name should fail validation");
-    assert_eq!(cmd.unwrap_err(), "New name cannot be empty");
+    assert_eq!(
+        cmd.unwrap_err(),
+        DomainError::ValidationError("New name cannot be empty".to_string())
+    );
 }
 
 // ============================================================================
@@ -372,7 +380,10 @@ fn test_rename_empty_name_validation() {
     let cmd = RenameUserCommand::new(1, "".to_string());
 
     assert!(cmd.is_err(), "Empty name should fail validation");
-    assert_eq!(cmd.unwrap_err(), "New name cannot be empty");
+    assert_eq!(
+        cmd.unwrap_err(),
+        DomainError::ValidationError("New name cannot be empty".to_string())
+    );
 }
 
 #[test]

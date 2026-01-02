@@ -34,7 +34,7 @@ pub mod composition;
 // Re-export commonly used types at the library root for convenience
 pub use composition::AppBuilder;
 pub use domain::{Repository, IRepository};
-pub use infrastructure::Logger;
+pub use infrastructure::{Logger, DomainError, DomainResult};
 pub use events::{EventStore, EventBus, EventHandler, UserEvent};
 pub use commands::{RegisterUserCommand, RenameUserCommand};
 pub use events::projections::TypedUserProjectionHandler;
