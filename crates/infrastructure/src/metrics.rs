@@ -50,6 +50,14 @@ impl HandlerMetrics {
         }
     }
 
+    pub fn error_rate_percent(&self) -> f64 {
+        if self.total_executions == 0 {
+            0.0
+        } else {
+            (self.failed_executions as f64 / self.total_executions as f64) * 100.0
+        }
+    }
+
     pub fn retry_rate_percent(&self) -> f64 {
         if self.total_executions == 0 {
             0.0
@@ -186,8 +194,8 @@ impl MetricsRegistry {
             highest_error_rate_handler: handlers
                 .iter()
                 .max_by(|a, b| {
-                    a.success_rate_percent()
-                        .partial_cmp(&b.success_rate_percent())
+                    a.error_rate_percent()
+                        .partial_cmp(&b.error_rate_percent())
                         .unwrap()
                 })
                 .cloned(),
