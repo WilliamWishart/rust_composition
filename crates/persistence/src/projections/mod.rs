@@ -36,6 +36,15 @@ impl UserProjection {
             .collect()
     }
 
+    pub fn find_by_name(&self, name: &str) -> Option<UserReadModel> {
+        self.users
+            .lock()
+            .unwrap()
+            .values()
+            .find(|u| u.name == name)
+            .cloned()
+    }
+
     fn handle_user_registered(&self, user_id: u32, name: String, timestamp: i64) {
         let user = UserReadModel {
             id: user_id,

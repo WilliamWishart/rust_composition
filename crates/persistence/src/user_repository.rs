@@ -1,14 +1,16 @@
 // User Repository Implementation
 use domain::{User, events::UserEvent, errors::DomainResult, repository::IRepository};
 use crate::event_store::EventStore;
+use crate::projections::UserProjection;
 
 pub struct Repository {
     event_store: EventStore,
+    projection: UserProjection,
 }
 
 impl Repository {
-    pub fn new(event_store: EventStore) -> Self {
-        Repository { event_store }
+    pub fn new(event_store: EventStore, projection: UserProjection) -> Self {
+        Repository { event_store, projection }
     }
 }
 
@@ -45,6 +47,12 @@ impl IRepository for Repository {
     }
 
     fn find_by_name(&self, name: &str) -> DomainResult<Option<User>> {
-        self.event_store.find_user_by_name(name)
+        // Use the projection layer for efficient name lookups
+        if let Some(read_model) = self.projection.find_by_name(name) {
+            // If found in projection, reconstruct the full aggregate from events
+            self.get_by_id(read_model.id).map(Some)
+        } else {
+            Ok(None)
+        }
     }
 }

@@ -24,13 +24,15 @@ fn setup_cqrs_system() -> (
     let logger = Arc::new(MockLogger::new());
     let event_store = EventStore::new();
     let event_bus = EventBus::new();
-    let repository = Arc::new(Repository::new(event_store));
 
     // Setup projection and subscribe to events
     let user_projection = UserProjection::new();
     let projection_handler = TypedUserProjectionHandler::new(user_projection.clone());
     let adapter = Arc::new(TypedUserProjectionHandlerAdapter::new(projection_handler));
     event_bus.subscribe(adapter);
+
+    // Create repository with both event store and projection
+    let repository = Arc::new(Repository::new(event_store, user_projection.clone()));
 
     // Create command handler
     let command_handler = Arc::new(UserCommandHandler::new(
@@ -171,8 +173,9 @@ fn test_repository_fails_on_missing_aggregate() {
 #[tokio::test]
 async fn test_eventbus_subscribers_receive_events() {
     let event_store = EventStore::new();
+    let projection = ::rust_composition::events::projections::UserProjection::new();
     let event_bus = EventBus::new();
-    let repository = Arc::new(Repository::new(event_store));
+    let repository = Arc::new(Repository::new(event_store, projection));
 
     // Create a custom test subscriber
     let test_subscriber = Arc::new(TestEventSubscriber::new());

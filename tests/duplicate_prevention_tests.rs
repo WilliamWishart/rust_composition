@@ -2,6 +2,7 @@ use rust_composition::{
     infrastructure::{MockLogger, DomainError},
     commands::{RegisterUserCommand, UserCommandHandler},
     events::{EventStore, EventBus},
+    events::projections::{UserProjection, TypedUserProjectionHandler, TypedUserProjectionHandlerAdapter},
     domain::Repository,
 };
 use std::sync::Arc;
@@ -10,12 +11,19 @@ use std::sync::Arc;
 fn setup_cqrs_system() -> (EventStore, EventBus, UserCommandHandler, Arc<Repository>) {
     let logger = Arc::new(MockLogger::new());
     let event_store = EventStore::new();
+    let projection = UserProjection::new();
     let event_bus = EventBus::new();
-    let repository = Arc::new(Repository::new(event_store.clone()));
+    
+    // Subscribe projection to event bus so it gets updated
+    let projection_handler = TypedUserProjectionHandler::new(projection.clone());
+    let adapter = Arc::new(TypedUserProjectionHandlerAdapter::new(projection_handler));
+    event_bus.subscribe(adapter);
+    
+    let repository = Arc::new(Repository::new(event_store.clone(), projection));
 
-    let command_handler = UserCommandHandler::new(repository.clone(), event_bus, logger);
+    let command_handler = UserCommandHandler::new(repository.clone(), event_bus.clone(), logger);
 
-    (event_store, EventBus::new(), command_handler, repository)
+    (event_store, event_bus, command_handler, repository)
 }
 
 #[tokio::test]

@@ -88,20 +88,6 @@ impl EventStore {
     pub fn dlq_size(&self) -> usize {
         self.dead_letter_queue.lock().unwrap().len()
     }
-
-    pub fn find_user_by_name(&self, name: &str) -> domain::errors::DomainResult<Option<domain::User>> {
-        let events = self.events.lock().unwrap();
-        
-        let mut users: HashMap<u32, domain::User> = HashMap::new();
-        
-        for aggregate_events in events.values() {
-            if let Ok(user) = domain::User::load_from_history(aggregate_events.clone()) {
-                users.insert(user.id, user);
-            }
-        }
-        
-        Ok(users.values().find(|u| u.name == name).cloned())
-    }
 }
 
 impl Default for EventStore {
