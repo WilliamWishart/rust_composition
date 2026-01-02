@@ -50,7 +50,7 @@ impl IRepository for Repository {
         // Use the projection layer for efficient name lookups
         if let Some(read_model) = self.projection.find_by_name(name) {
             // If found in projection, reconstruct the full aggregate from events
-            self.get_by_id(read_model.id).map(Some)
+            self.get_by_id(read_model.id).map(|user| Some(user))
         } else {
             Ok(None)
         }

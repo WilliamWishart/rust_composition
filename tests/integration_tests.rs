@@ -173,7 +173,7 @@ fn test_repository_fails_on_missing_aggregate() {
 #[tokio::test]
 async fn test_eventbus_subscribers_receive_events() {
     let event_store = EventStore::new();
-    let projection = ::rust_composition::events::projections::UserProjection::new();
+    let projection = UserProjection::new();
     let event_bus = EventBus::new();
     let repository = Arc::new(Repository::new(event_store, projection));
 
