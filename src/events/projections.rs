@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use crate::events::UserEvent;
 use crate::events::event_bus::EventHandler;
+use async_trait::async_trait;
 
 /// UserProjection - Read model built from domain events
 /// Projections are eventually consistent - they're built by replaying events
@@ -120,11 +121,31 @@ impl Handles<UserEvent> for TypedUserProjectionHandler {
     }
 }
 
-/// Implements EventHandler trait for EventBus integration
+/// Implements EventHandler trait for EventBus integration (async)
 /// Allows TypedUserProjectionHandler to be registered as an EventBus subscriber
+/// Now handles events asynchronously without blocking the event bus
+#[async_trait]
 impl EventHandler for TypedUserProjectionHandler {
-    fn handle_event(&self, event: &UserEvent) {
-        self.handle(event);
+    async fn handle_event(&self, event: &UserEvent) {
+        // Pattern match on the event enum - compiler ensures all variants handled
+        match event {
+            UserEvent::Registered {
+                user_id,
+                name,
+                timestamp,
+            } => {
+                self.projection
+                    .handle_user_registered(*user_id, name.clone(), *timestamp);
+            }
+            UserEvent::Renamed {
+                user_id,
+                new_name,
+                timestamp,
+            } => {
+                self.projection
+                    .handle_user_renamed(*user_id, new_name.clone(), *timestamp);
+            }
+        }
     }
 }
 

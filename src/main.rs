@@ -3,11 +3,12 @@
 // ============================================================================
 //
 // Demonstrates CQRS with Event Sourcing and Eventual Consistency following
-// Gregory Young's m-r pattern:
+// Gregory Young's m-r pattern with async event publishing:
 // - Aggregates apply events and accumulate changes
 // - Repository reconstructs aggregates from event history
 // - Optimistic locking prevents concurrency violations
 // - Commands → Aggregates → Events → Projections → Queries
+// - Event publishing is now asynchronous and non-blocking
 
 use rust_composition::{
     infrastructure::MockLogger, commands::{RegisterUserCommand, RenameUserCommand},
@@ -18,7 +19,8 @@ use rust_composition::{
 };
 use std::sync::Arc;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     println!("=== ENTERPRISE DDD WITH CQRS + EVENT SOURCING (m-r pattern) ===\n");
 
     // --- SETUP: Create infrastructure ---
@@ -53,20 +55,21 @@ fn main() {
     println!("✓ Query Handler (Read Side) initialized");
     println!("✓ Projection Handler subscribed to EventBus\n");
 
-    // --- EXECUTION: Commands (Write Side) ---
-    println!("--- COMMANDS (Write Side) ---\n");
+    // --- EXECUTION: Commands (Write Side) with Async Event Publishing ---
+    println!("--- COMMANDS (Write Side) - ASYNC EVENT PUBLISHING ---\n");
     
-    // Execute command to register user
+    // Execute command to register user asynchronously
     let cmd1 = RegisterUserCommand::new(1, "Alice".to_string())
         .expect("Command validation failed");
-    println!("📝 Command: Create User '{}'", cmd1.name);
+    println!("📝 Command: Create User '{}' (Async)", cmd1.name);
     
-    match command_handler.handle_register_user(cmd1) {
+    match command_handler.handle_register_user_async(cmd1).await {
         Ok(()) => {
-            println!("✓ Command processed");
+            println!("✓ Command processed asynchronously");
             println!("  - Aggregate created from command");
             println!("  - Event appended to EventStore");
-            println!("  - EventBus published to all subscribers");
+            println!("  - EventBus published to all subscribers (non-blocking)");
+            println!("  - Event handlers spawn concurrent async tasks");
             println!("  - Projection updated (Eventual Consistency)\n");
         }
         Err(e) => println!("❌ Command failed: {}\n", e),
@@ -74,13 +77,14 @@ fn main() {
 
     let cmd2 = RegisterUserCommand::new(2, "Bob".to_string())
         .expect("Command validation failed");
-    println!("📝 Command: Create User '{}'", cmd2.name);
+    println!("📝 Command: Create User '{}' (Async)", cmd2.name);
     
-    match command_handler.handle_register_user(cmd2) {
+    match command_handler.handle_register_user_async(cmd2).await {
         Ok(()) => {
-            println!("✓ Command processed");
+            println!("✓ Command processed asynchronously");
             println!("  - Aggregate created from command");
             println!("  - Event appended to EventStore");
+            println!("  - EventBus published to subscribers (non-blocking)");
             println!("  - Projection updated (Eventual Consistency)\n");
         }
         Err(e) => println!("❌ Command failed: {}\n", e),
@@ -92,19 +96,20 @@ fn main() {
         println!("⚠️  Invalid command rejected: {}\n", e);
     }
 
-    // --- RENAME COMMANDS (Write Side) ---
-    println!("--- RENAME COMMANDS (Write Side) ---\n");
+    // --- RENAME COMMANDS (Write Side) with Async Event Publishing ---
+    println!("--- RENAME COMMANDS (Write Side) - ASYNC EVENT PUBLISHING ---\n");
 
     let rename_cmd = RenameUserCommand::new(1, "Alicia".to_string())
         .expect("Command validation failed");
-    println!("📝 Command: Rename User 1 to '{}'", rename_cmd.new_name);
+    println!("📝 Command: Rename User 1 to '{}' (Async)", rename_cmd.new_name);
     
-    match command_handler.handle_rename_user(rename_cmd) {
+    match command_handler.handle_rename_user_async(rename_cmd).await {
         Ok(()) => {
-            println!("✓ Command processed");
+            println!("✓ Command processed asynchronously");
             println!("  - Aggregate loaded from event history");
             println!("  - New event appended to EventStore");
-            println!("  - EventBus published to all subscribers");
+            println!("  - EventBus published to subscribers (non-blocking)");
+            println!("  - Event handlers spawn concurrent async tasks");
             println!("  - Projection updated (Eventual Consistency)\n");
         }
         Err(e) => println!("❌ Command failed: {}\n", e),
@@ -154,13 +159,20 @@ fn main() {
     
     println!("\nTotal users in read model: {}", user_query.get_user_count());
 
-    // --- DEMONSTRATE CQRS + EVENT SOURCING BENEFITS ---
-    println!("\n=== CQRS + EVENT SOURCING BENEFITS ===");
+    // --- DEMONSTRATE CQRS + EVENT SOURCING BENEFITS WITH ASYNC ---
+    println!("\n=== CQRS + EVENT SOURCING + ASYNC/AWAIT BENEFITS ===");
     println!("✓ Command-Query Separation: Different models for reads/writes");
     println!("✓ Event Sourcing: Complete audit trail of all changes");
     println!("✓ Eventual Consistency: Read model eventually matches write model");
     println!("✓ Temporal Queries: Can reconstruct state at any point in time");
     println!("✓ Scalability: Read and write models can scale independently");
     println!("✓ Testability: Commands produce predictable events");
+    println!("\n=== ASYNC/AWAIT IMPROVEMENTS ===");
+    println!("✓ Non-blocking Event Publishing: Events published on separate async tasks");
+    println!("✓ Concurrent Event Handlers: Multiple handlers run concurrently via tokio::spawn");
+    println!("✓ Better Latency: Command handlers don't wait for all subscribers");
+    println!("✓ Scalable Event Bus: Handles many subscribers without blocking");
+    println!("✓ Future-proof: Ready for async I/O operations in handlers (DB, API calls)");
 }
+
 
