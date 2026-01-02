@@ -52,11 +52,11 @@ impl User {
         }
 
         // Check uniqueness via repository
-        if repository.find_by_name(&name)?.is_some() {
-            let existing = repository.find_by_name(&name)?;
+        let existing = repository.find_by_name(&name)?;
+        if let Some(existing_user) = existing {
             return Err(crate::errors::AppError::Validation(
                 format!("Username '{}' is already taken by user ID {}", 
-                       name, existing.unwrap().id)
+                       name, existing_user.id)
             ));
         }
 
