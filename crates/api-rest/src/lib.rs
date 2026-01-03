@@ -5,6 +5,7 @@ use persistence::UserProjection;
 
 pub mod dto;
 pub mod handlers;
+pub mod openapi;
 
 #[derive(Clone)]
 pub struct AppState {

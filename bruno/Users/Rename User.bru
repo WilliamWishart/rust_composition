@@ -1,0 +1,29 @@
+meta {
+  name: Rename User
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{base_url}}/users
+  body: json
+  auth: none
+}
+
+body:json {
+   
+  {
+    "user_id": 1,
+    "new_name": "Alice Updated"
+  }
+}
+
+tests {
+  test("Status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  
+  test("Response has message", function() {
+    expect(res.body.message).to.exist;
+  });
+}

@@ -1,0 +1,21 @@
+meta {
+  name: Get User by ID
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/users/1
+}
+
+tests {
+  test("Status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  
+  test("Response has user data", function() {
+    expect(res.body.id).to.exist;
+    expect(res.body.name).to.exist;
+    expect(res.body.created_at).to.exist;
+  });
+}

@@ -4,7 +4,22 @@ use crate::{dto::*, AppState};
 use domain::errors::AppError;
 use super::error::error_to_response;
 
-/// GET /users/:user_id - Get a user by ID
+/// Get a user by ID
+/// 
+/// Retrieves a single user by their unique identifier.
+/// Returns 200 OK if found, 404 Not Found otherwise.
+#[utoipa::path(
+    get,
+    path = "/users/{user_id}",
+    params(
+        ("user_id" = u32, Path, description = "The user's unique identifier")
+    ),
+    responses(
+        (status = 200, description = "User found", body = UserResponse),
+        (status = 404, description = "User not found", body = ErrorResponse),
+    ),
+    tag = "Users"
+)]
 pub async fn get_user(
     State(state): State<AppState>,
     Path(user_id): Path<u32>,
@@ -25,7 +40,18 @@ pub async fn get_user(
     }
 }
 
-/// GET /users - Fetch all users
+/// Fetch all users
+/// 
+/// Retrieves a list of all registered users.
+/// Returns 200 OK with an array of users (may be empty).
+#[utoipa::path(
+    get,
+    path = "/users",
+    responses(
+        (status = 200, description = "List of all users", body = Vec<UserResponse>),
+    ),
+    tag = "Users"
+)]
 pub async fn get_all_users(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
@@ -38,7 +64,22 @@ pub async fn get_all_users(
     (StatusCode::OK, Json(response)).into_response()
 }
 
-/// GET /users/search/:name - Find a user by name
+/// Search for a user by name
+/// 
+/// Finds a user by their exact name.
+/// Returns 200 OK if found, 404 Not Found otherwise.
+#[utoipa::path(
+    get,
+    path = "/users/search/{name}",
+    params(
+        ("name" = String, Path, description = "The user's name to search for")
+    ),
+    responses(
+        (status = 200, description = "User found", body = UserResponse),
+        (status = 404, description = "User with that name not found", body = ErrorResponse),
+    ),
+    tag = "Users"
+)]
 pub async fn find_user_by_name(
     State(state): State<AppState>,
     Path(name): Path<String>,

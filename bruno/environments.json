@@ -1,0 +1,11 @@
+{
+  "local": {
+    "base_url": "http://localhost:3000"
+  },
+  "docker": {
+    "base_url": "http://localhost:8080"
+  },
+  "production": {
+    "base_url": "https://api.example.com"
+  }
+}

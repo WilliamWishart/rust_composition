@@ -4,7 +4,21 @@ use crate::{dto::*, AppState};
 use domain::commands::{RegisterUserCommand, RenameUserCommand};
 use super::error::error_to_response;
 
-/// POST /users - Register a new user
+/// Register a new user
+/// 
+/// Creates a new user with the provided ID and name.
+/// Returns 201 Created on success.
+#[utoipa::path(
+    post,
+    path = "/users",
+    request_body = RegisterUserRequest,
+    responses(
+        (status = 201, description = "User registered successfully", body = SuccessResponse),
+        (status = 409, description = "User with this ID already exists", body = ErrorResponse),
+        (status = 422, description = "Invalid user data (ID must be > 0, name 1-255 chars)", body = ErrorResponse),
+    ),
+    tag = "Users"
+)]
 pub async fn register_user(
     State(state): State<AppState>,
     Json(payload): Json<RegisterUserRequest>,
@@ -46,7 +60,22 @@ pub async fn register_user(
     }
 }
 
-/// PUT /users - Rename an existing user
+/// Rename an existing user
+/// 
+/// Updates the name of an existing user.
+/// Returns 200 OK on success.
+#[utoipa::path(
+    put,
+    path = "/users",
+    request_body = RenameUserRequest,
+    responses(
+        (status = 200, description = "User renamed successfully", body = SuccessResponse),
+        (status = 404, description = "User with this ID not found", body = ErrorResponse),
+        (status = 409, description = "Concurrency violation (user was modified)", body = ErrorResponse),
+        (status = 422, description = "Invalid user data (ID must be > 0, name 1-255 chars)", body = ErrorResponse),
+    ),
+    tag = "Users"
+)]
 pub async fn rename_user(
     State(state): State<AppState>,
     Json(payload): Json<RenameUserRequest>,
