@@ -22,15 +22,15 @@ impl IRepository for Repository {
             return Ok(Vec::new());
         }
 
-        if expected_version != -1 && aggregate.version != expected_version {
+        if expected_version != -1 && aggregate.version() != expected_version {
             return Err(domain::errors::AppError::ConcurrencyViolation {
                 expected_version,
-                actual_version: aggregate.version,
+                actual_version: aggregate.version(),
             });
         }
 
         for event in changes.iter() {
-            self.event_store.append(aggregate.id, event.clone());
+            self.event_store.append(aggregate.id().value(), event.clone());
         }
 
         Ok(changes)

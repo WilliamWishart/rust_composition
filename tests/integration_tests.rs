@@ -9,7 +9,7 @@ use rust_composition::{
     events::{EventStore, EventBus, EventHandler},
     events::projections::{UserProjection, TypedUserProjectionHandler, TypedUserProjectionHandlerAdapter},
     queries::UserQuery,
-    domain::{Repository, IRepository, User},
+    domain::{Repository, IRepository, User, UserId, UserName},
 };
 use std::sync::Arc;
 use async_trait::async_trait;
@@ -106,25 +106,29 @@ fn test_rename_user_command_validation() {
 
 #[test]
 fn test_aggregate_creates_event_on_new() {
-    let user = User::new(1, "Alice".to_string()).expect("Should create user");
+    let user_id = UserId::new(1).expect("Should create user ID");
+    let user_name = UserName::new("Alice".to_string()).expect("Should create user name");
+    let user = User::new(user_id.clone(), user_name.clone()).expect("Should create user");
 
-    assert_eq!(user.id, 1);
-    assert_eq!(user.name, "Alice");
-    assert_eq!(user.version, -1); // Version is -1 until persisted
+    assert_eq!(user.id().value(), 1);
+    assert_eq!(user.name().value(), "Alice");
+    assert_eq!(user.version(), -1); // Version is -1 until persisted
     assert!(!user.get_uncommitted_changes().is_empty(), "Should have uncommitted changes");
 }
 
 #[test]
 fn test_aggregate_load_from_history() {
     // Create a user and get its events
-    let user1 = User::new(1, "Alice".to_string()).expect("Should create user");
+    let user_id = UserId::new(1).expect("Should create user ID");
+    let user_name = UserName::new("Alice".to_string()).expect("Should create user name");
+    let user1 = User::new(user_id.clone(), user_name.clone()).expect("Should create user");
     let events = user1.get_uncommitted_changes();
 
     // Load a new user from that history
     let user2 = User::load_from_history(events).expect("Should load from history");
 
-    assert_eq!(user2.id, 1);
-    assert_eq!(user2.name, "Alice");
+    assert_eq!(user2.id().value(), 1);
+    assert_eq!(user2.name().value(), "Alice");
 }
 
 // ============================================================================
@@ -135,7 +139,9 @@ fn test_aggregate_load_from_history() {
 fn test_repository_saves_events() {
     let (repository, _, _, _) = setup_cqrs_system();
 
-    let user = User::new(1, "Alice".to_string()).expect("Should create user");
+    let user_id = UserId::new(1).expect("Should create user ID");
+    let user_name = UserName::new("Alice".to_string()).expect("Should create user name");
+    let user = User::new(user_id, user_name).expect("Should create user");
     let result = repository.save(&user, -1);
 
     assert!(result.is_ok(), "Save should succeed");
@@ -147,14 +153,16 @@ fn test_repository_retrieves_saved_aggregate() {
     let (repository, _, _, _) = setup_cqrs_system();
 
     // Save an aggregate
-    let user1 = User::new(1, "Alice".to_string()).expect("Should create user");
+    let user_id = UserId::new(1).expect("Should create user ID");
+    let user_name = UserName::new("Alice".to_string()).expect("Should create user name");
+    let user1 = User::new(user_id, user_name).expect("Should create user");
     repository.save(&user1, -1).expect("Save should succeed");
 
     // Retrieve it
     let user2 = repository.get_by_id(1).expect("Should retrieve aggregate");
 
-    assert_eq!(user2.id, 1);
-    assert_eq!(user2.name, "Alice");
+    assert_eq!(user2.id().value(), 1);
+    assert_eq!(user2.name().value(), "Alice");
 }
 
 #[test]
@@ -182,7 +190,9 @@ async fn test_eventbus_subscribers_receive_events() {
     event_bus.subscribe(test_subscriber.clone());
 
     // Issue a command
-    let user = User::new(1, "Alice".to_string()).expect("Should create user");
+    let user_id = UserId::new(1).expect("Should create user ID");
+    let user_name = UserName::new("Alice".to_string()).expect("Should create user name");
+    let user = User::new(user_id, user_name).expect("Should create user");
     let events = repository.save(&user, -1).expect("Save should succeed");
 
     // Publish events asynchronously
@@ -230,7 +240,7 @@ async fn test_end_to_end_single_user_registration() {
 
     // Verify: Aggregate reconstructed from events
     let loaded_user = repository.get_by_id(1).expect("Should retrieve user");
-    assert_eq!(loaded_user.name, "Bob");
+    assert_eq!(loaded_user.name().value(), "Bob");
 
     // Verify: Projection updated (read model)
     let queried_user = user_query.get_user(1).expect("Should query user");
@@ -273,7 +283,7 @@ async fn test_end_to_end_multiple_users() {
     // Verify all users can be reconstructed from event store
     for i in 1..=5 {
         let user = repository.get_by_id(i).expect("Should retrieve aggregate");
-        assert_eq!(user.name, format!("User{}", i));
+        assert_eq!(user.name().value(), format!("User{}", i));
     }
 }
 
@@ -292,20 +302,22 @@ async fn test_eventual_consistency_read_after_write() {
 }
 
 #[tokio::test]
-async fn test_duplicate_user_ids_overwrite() {
-    let (_, _, command_handler, user_query) = setup_cqrs_system();
+async fn test_duplicate_user_ids_rejected() {
+    let (_, _, command_handler, _user_query) = setup_cqrs_system();
 
     // Create user with ID 1
     let cmd1 = RegisterUserCommand::new(1, "Alice".to_string()).expect("Valid command");
     command_handler.handle_register_user(cmd1).await.expect("Command should succeed");
 
-    // Create another user with same ID (overwrite)
+    // Try to create another user with same ID (should fail with validation error)
     let cmd2 = RegisterUserCommand::new(1, "Bob".to_string()).expect("Valid command");
-    command_handler.handle_register_user(cmd2).await.expect("Command should succeed");
+    let result = command_handler.handle_register_user(cmd2).await;
 
-    // Query should return the latest state
-    let result = user_query.get_user(1).expect("Should find user");
-    assert!(result.contains("Bob"), "Should have the latest name");
+    // Should fail due to duplicate ID
+    assert!(result.is_err(), "Duplicate user ID should fail");
+    let err_msg = format!("{:?}", result.unwrap_err());
+    assert!(err_msg.contains("User ID 1 already exists") || err_msg.contains("already exists"),
+            "Error should indicate ID already exists, got: {}", err_msg);
 }
 
 #[test]
@@ -382,7 +394,7 @@ async fn test_rename_user_end_to_end() {
 
     // Verify: Aggregate has new name
     let user = repository.get_by_id(1).expect("Should retrieve user");
-    assert_eq!(user.name, "Alicia", "Aggregate should have new name");
+    assert_eq!(user.name().value(), "Alicia", "Aggregate should have new name");
 
     // Verify: Projection reflects rename
     let result = user_query.get_user(1).expect("Should find user");
@@ -450,8 +462,8 @@ async fn test_aggregate_reconstruction_with_rename() {
     let user = repository.get_by_id(1).expect("Should retrieve user");
 
     // Verify final state reflects all events applied
-    assert_eq!(user.name, "Robert", "Reconstructed user should have final name");
-    assert_eq!(user.version, 1, "Should have version 1 after two events (0-indexed)");
+    assert_eq!(user.name().value(), "Robert", "Reconstructed user should have final name");
+    assert_eq!(user.version(), 1, "Should have version 1 after two events (0-indexed)");
 }
 
 #[tokio::test]
@@ -481,7 +493,7 @@ async fn test_multiple_renames_sequence() {
 
     // Verify final state
     let user = repository.get_by_id(1).expect("Should retrieve user");
-    assert_eq!(user.name, "Alice-Ann", "Should have final name after multiple renames");
+    assert_eq!(user.name().value(), "Alice-Ann", "Should have final name after multiple renames");
 
     let result = user_query.get_user(1).expect("Should find user");
     assert!(result.contains("Alice-Ann"), "Query should reflect final rename");
@@ -507,5 +519,5 @@ async fn test_rename_preserves_user_id() {
 
     // Verify user ID unchanged
     let user = repository.get_by_id(42).expect("Should retrieve user");
-    assert_eq!(user.id, 42, "User ID should be preserved");
+    assert_eq!(user.id().value(), 42, "User ID should be preserved");
 }

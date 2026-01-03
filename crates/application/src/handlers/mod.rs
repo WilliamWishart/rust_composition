@@ -1,6 +1,10 @@
 // Command handlers
 use std::sync::Arc;
-use domain::{commands::{RegisterUserCommand, RenameUserCommand}, User, errors::DomainResult, IRepository};
+use domain::{
+    commands::{RegisterUserCommand, RenameUserCommand},
+    errors::DomainResult,
+    IRepository, UserRegistrationService, UserId, UserName,
+};
 use infrastructure::Logger;
 use persistence::Repository;
 use crate::EventBus;
@@ -16,6 +20,7 @@ fn generate_correlation_id() -> String {
 
 pub struct UserCommandHandler {
     repository: Arc<Repository>,
+    registration_service: UserRegistrationService,
     event_bus: EventBus,
     logger: Arc<dyn Logger>,
 }
@@ -26,8 +31,11 @@ impl UserCommandHandler {
         event_bus: EventBus,
         logger: Arc<dyn Logger>,
     ) -> Self {
+        let registration_service = UserRegistrationService::new(repository.clone());
+        
         UserCommandHandler {
             repository,
+            registration_service,
             event_bus,
             logger,
         }
@@ -41,17 +49,18 @@ impl UserCommandHandler {
             command.user_id, command.name, correlation_id
         ));
 
-        let user = User::new_with_uniqueness_check(
-            command.user_id,
-            command.name.clone(),
-            self.repository.as_ref(),
-        )?;
+        // Convert primitives to value objects
+        let user_id = UserId::new(command.user_id)?;
+        let user_name = UserName::new(command.name.clone())?;
+
+        // Use domain service to register user with all specifications
+        let user = self.registration_service.register_user(user_id, user_name)?;
 
         let saved_events = self.repository.save(&user, -1)?;
 
         for (_index, event) in saved_events.iter().enumerate() {
             let _envelope = domain::events::EventEnvelope::new(
-                user.id,
+                user.id().value(),
                 event.clone(),
                 0,
                 correlation_id.clone(),
@@ -89,15 +98,17 @@ impl UserCommandHandler {
 
         let mut user = self.repository.get_by_id(command.user_id)?;
 
-        user.rename(command.new_name.clone())?;
+        // Convert to value object with validation
+        let new_name = UserName::new(command.new_name.clone())?;
+        user.rename(new_name)?;
 
-        let saved_events = self.repository.save(&user, user.version)?;
+        let saved_events = self.repository.save(&user, user.version())?;
 
         for (_index, event) in saved_events.iter().enumerate() {
             let _envelope = domain::events::EventEnvelope::new(
-                user.id,
+                user.id().value(),
                 event.clone(),
-                user.version,
+                user.version(),
                 correlation_id.clone(),
             );
             

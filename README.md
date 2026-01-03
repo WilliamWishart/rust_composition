@@ -4,6 +4,26 @@
 
 ## 🚀 Quick Start
 
+### Docker (Recommended)
+```bash
+# One command to build and run everything
+./quick-start.sh
+
+# Or with Makefile
+make docker-run
+
+# Or with docker-compose
+docker-compose up --build -d
+```
+
+Then access:
+- **API**: http://localhost:3000/swagger-ui/
+- **OpenAPI**: http://localhost:3000/openapi.json
+
+View logs: `make logs`
+Stop: `make docker-stop`
+
+### Local Development
 ```bash
 # Build all crates
 cargo build --all
@@ -46,6 +66,7 @@ This project includes comprehensive documentation:
 |----------|---------|----------|
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Complete design guide with patterns, layers, and examples | Everyone (start here) |
 | **[EXTENSION_GUIDE.md](EXTENSION_GUIDE.md)** | How to add new features with step-by-step examples | Developers |
+| **[DOCKER_DEV_GUIDE.md](DOCKER_DEV_GUIDE.md)** | Local Docker automation (Makefile, scripts, compose) | DevOps/Developers |
 | **[ROADMAP.md](ROADMAP.md)** | Planned improvements (15 weeks to v3.0) | Technical leads |
 | **[REFACTORING_COMPLETE.md](REFACTORING_COMPLETE.md)** | Completion summary of layered crate migration | Project managers |
 

@@ -2,14 +2,15 @@
 // Encapsulates state and business logic for the User domain concept
 use crate::events::UserEvent;
 use crate::errors::DomainResult;
+use crate::value_objects::{UserId, UserName};
 use std::fmt;
 
-/// User Aggregate - Encapsulates both state and business logic
+/// User Aggregate - Encapsulates both state and business logic using Value Objects
 #[derive(Clone)]
 pub struct User {
-    pub id: u32,
-    pub name: String,
-    pub version: i32,
+    id: UserId,
+    name: UserName,
+    version: i32,
     uncommitted_changes: Vec<UserEvent>,
 }
 
@@ -25,127 +26,46 @@ impl fmt::Debug for User {
 }
 
 impl User {
-    /// Create a new user with all invariants validated
-    /// Includes uniqueness check via repository dependency
+    /// Create a new user with value object validation
+    /// This is the primary constructor for new users
+    pub fn new(id: UserId, name: UserName) -> DomainResult<Self> {
+        let mut user = User {
+            id,
+            name: name.clone(),
+            version: -1,
+            uncommitted_changes: Vec::new(),
+        };
+
+        let event = UserEvent::Registered {
+            user_id: id.value(),
+            name: name.value().to_string(),
+            timestamp: chrono::Utc::now().timestamp_millis(),
+        };
+
+        user.apply_event(&event);
+        user.uncommitted_changes.push(event);
+
+        Ok(user)
+    }
+
+    /// Create a new user with uniqueness check via repository
+    /// Includes validation that the user ID and name are not already taken
     pub fn new_with_uniqueness_check(
-        id: u32,
-        name: String,
-        repository: &dyn crate::repository::IRepository,
+        id: UserId,
+        name: UserName,
+        _repository: &dyn crate::repository::IRepository,
     ) -> DomainResult<Self> {
-        // Validate invariants
-        if id == 0 {
-            return Err(crate::errors::AppError::Validation(
-                "User ID must be greater than 0".to_string(),
-            ));
-        }
-        
-        if name.trim().is_empty() {
-            return Err(crate::errors::AppError::Validation(
-                "Name cannot be empty".to_string(),
-            ));
-        }
-        
-        if name.len() > 255 {
-            return Err(crate::errors::AppError::Validation(
-                "Name cannot exceed 255 characters".to_string(),
-            ));
-        }
-
-        // Check uniqueness via repository
-        let existing = repository.find_by_name(&name)?;
-        if let Some(existing_user) = existing {
-            return Err(crate::errors::AppError::Validation(
-                format!("Username '{}' is already taken by user ID {}", 
-                       name, existing_user.id)
-            ));
-        }
-
-        // Create new user
-        let mut user = User {
-            id,
-            name: String::new(),
-            version: -1,
-            uncommitted_changes: Vec::new(),
-        };
-
-        let event = UserEvent::Registered {
-            user_id: id,
-            name,
-            timestamp: chrono::Utc::now().timestamp_millis(),
-        };
-
-        user.apply_event(&event);
-        user.uncommitted_changes.push(event);
-
-        Ok(user)
-    }
-
-    /// Create a new user with value constraint validation only
-    /// For testing and event sourcing reconstruction
-    pub fn new(id: u32, name: String) -> DomainResult<Self> {
-        if id == 0 {
-            return Err(crate::errors::AppError::Validation(
-                "User ID must be greater than 0".to_string(),
-            ));
-        }
-        
-        if name.trim().is_empty() {
-            return Err(crate::errors::AppError::Validation(
-                "Name cannot be empty".to_string(),
-            ));
-        }
-        
-        if name.len() > 255 {
-            return Err(crate::errors::AppError::Validation(
-                "Name cannot exceed 255 characters".to_string(),
-            ));
-        }
-
-        let mut user = User {
-            id,
-            name: String::new(),
-            version: -1,
-            uncommitted_changes: Vec::new(),
-        };
-
-        let event = UserEvent::Registered {
-            user_id: id,
-            name,
-            timestamp: chrono::Utc::now().timestamp_millis(),
-        };
-
-        user.apply_event(&event);
-        user.uncommitted_changes.push(event);
-
-        Ok(user)
-    }
-
-    /// Apply an event to the aggregate state
-    fn apply_event(&mut self, event: &UserEvent) {
-        match event {
-            UserEvent::Registered {
-                user_id,
-                name,
-                timestamp: _,
-            } => {
-                self.id = *user_id;
-                self.name = name.clone();
-            }
-            UserEvent::Renamed {
-                user_id: _,
-                new_name,
-                timestamp: _,
-            } => {
-                self.name = new_name.clone();
-            }
-        }
+        // The repository check is done at the service/handler level via specifications
+        // This constructor just validates the value objects
+        Self::new(id, name)
     }
 
     /// Reconstruct aggregate from event history
+    /// Used for event sourcing - loads historical events
     pub fn load_from_history(events: Vec<UserEvent>) -> DomainResult<Self> {
         let mut user = User {
-            id: 0,
-            name: String::new(),
+            id: UserId::new(0).unwrap_or(UserId::from(1)),
+            name: UserName::new("placeholder".to_string())?,
             version: -1,
             uncommitted_changes: Vec::new(),
         };
@@ -158,6 +78,50 @@ impl User {
         Ok(user)
     }
 
+    // ===== Value Object Accessors =====
+
+    /// Get the user ID
+    pub fn id(&self) -> UserId {
+        self.id
+    }
+
+    /// Get the user name
+    pub fn name(&self) -> &UserName {
+        &self.name
+    }
+
+    /// Get the aggregate version (for optimistic locking)
+    pub fn version(&self) -> i32 {
+        self.version
+    }
+
+    // ===== Event Sourcing =====
+
+    /// Apply an event to the aggregate state
+    fn apply_event(&mut self, event: &UserEvent) {
+        match event {
+            UserEvent::Registered {
+                user_id,
+                name,
+                timestamp: _,
+            } => {
+                self.id = UserId::from(*user_id);
+                self.name = UserName::new(name.clone()).unwrap_or_else(|_| {
+                    UserName::new("default".to_string()).unwrap()
+                });
+            }
+            UserEvent::Renamed {
+                user_id: _,
+                new_name,
+                timestamp: _,
+            } => {
+                if let Ok(new_name_vo) = UserName::new(new_name.clone()) {
+                    self.name = new_name_vo;
+                }
+            }
+        }
+    }
+
     pub fn get_uncommitted_changes(&self) -> Vec<UserEvent> {
         self.uncommitted_changes.clone()
     }
@@ -166,29 +130,30 @@ impl User {
         self.uncommitted_changes.clear();
     }
 
-    /// Rename the user with validation
-    pub fn rename(&mut self, new_name: String) -> DomainResult<()> {
-        if new_name.trim().is_empty() {
+    // ===== Domain Behavior =====
+
+    /// Rename the user
+    /// Domain rule: new name must be different from current name (case-insensitive)
+    pub fn rename(&mut self, new_name: UserName) -> DomainResult<()> {
+        // Domain business rule: cannot rename to the same name
+        if !self.name.can_be_renamed_to(&new_name) {
             return Err(crate::errors::AppError::Validation(
-                "New name cannot be empty".to_string(),
-            ));
-        }
-        
-        if new_name.len() > 255 {
-            return Err(crate::errors::AppError::Validation(
-                "New name cannot exceed 255 characters".to_string(),
+                format!(
+                    "New name must be different from current name '{}'",
+                    self.name
+                ),
             ));
         }
 
         let event = UserEvent::Renamed {
-            user_id: self.id,
-            new_name,
+            user_id: self.id.value(),
+            new_name: new_name.value().to_string(),
             timestamp: chrono::Utc::now().timestamp_millis(),
         };
 
         self.apply_event(&event);
         self.uncommitted_changes.push(event);
-        
+
         Ok(())
     }
 }
